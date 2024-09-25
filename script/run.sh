@@ -43,7 +43,7 @@ SELF_IP=$(hostname -I | awk '{print $1}')
 #     sleep 5
 # fi
 
-for uni in 0
+for uni in 1
 do 
     for op in 3
     do 
