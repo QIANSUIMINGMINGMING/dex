@@ -3,11 +3,15 @@
 addr=$(head -1 ../memcached.conf)
 port=$(awk 'NR==2{print}' ../memcached.conf)
 
-# kill old me
-ssh ${addr} "cat /tmp/memcached.pid | xargs kill"
+# # kill old me
+# ssh ${addr} "cat /tmp/memcached.pid | xargs kill"
 
-# launch memcached
-ssh ${addr} "memcached -u root -l ${addr} -p  ${port} -c 10000 -d -P /tmp/memcached.pid"
+# # launch memcached
+# ssh ${addr} "memcached -u root -l ${addr} -p  ${port} -c 10000 -d -P /tmp/memcached.pid"
+
+cat /tmp/memcached.pid | xargs kill
+memcached -u root -l ${addr} -p  ${port} -c 10000 -d -P /tmp/memcached.pid
+
 sleep 1
 
 # init 
