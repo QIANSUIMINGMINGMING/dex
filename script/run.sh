@@ -15,7 +15,7 @@ updateonly=(0 0 100 0 0)
 threads=(0 2 18 36 72 108 144)
 #threads=(0 2 16 32 64 96 128)
 mem_threads=(0 4)
-cache=(0 64 128 256 512 1024)
+cache=(0 64 128 4 512 1024)
 uniform=(0 1)
 zipf=(0.99)
 bulk=50
@@ -47,7 +47,7 @@ for uni in 0
 do 
     for op in 5
     do 
-        for idx in 2
+        for idx in 0
         do  
             for t in 6
             do
