@@ -47,7 +47,7 @@ for uni in 0
 do 
     for op in 5
     do 
-        for idx in 0
+        for idx in 1
         do  
             for t in 6
             do
