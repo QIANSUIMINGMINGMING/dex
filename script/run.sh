@@ -34,14 +34,14 @@ tune=0
 
 SELF_IP=$(hostname -I | awk '{print $1}')
 
-# Given IP address to validate
-GIVEN_IP=$(head -1 ../memcached.conf)
+# # Given IP address to validate
+# GIVEN_IP=$(head -1 ../memcached.conf)
 
-if [ $SELF_IP == $GIVEN_IP ]; then
-    ./restartMemc.sh
-else
-    sleep 5
-fi
+# if [ $SELF_IP == $GIVEN_IP ]; then
+#     ./restartMemc.sh
+# else
+#     sleep 5
+# fi
 
 for uni in 0
 do 
@@ -51,7 +51,7 @@ do
         do  
             for t in 6
             do
-                # ./restartMemc.sh
+                ./restartMemc.sh
                 sudo ../build/newbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[1]} ${cache[3]} $uni ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
                 sleep 2
             done

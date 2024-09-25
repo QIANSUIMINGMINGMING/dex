@@ -459,7 +459,7 @@ void bulk_load() {
 }
 
 void generate_index() {
-  numa_set_preferred(0);
+  numa_set_preferred(1);
   switch (tree_index) {
   case 0: // DEX
   {
