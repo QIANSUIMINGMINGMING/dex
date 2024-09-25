@@ -39,11 +39,11 @@ GIVEN_IP=$(head -1 ../memcached.conf)
 
 for uni in 0
 do 
-    for op in 0
+    for op in 1
     do 
         for idx in 0
         do  
-            for t in 1
+            for t in 6
             do
                 if [ $SELF_IP == $GIVEN_IP ]; then
                     ./restartMemc.sh
