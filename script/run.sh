@@ -21,7 +21,7 @@ zipf=(0.99)
 bulk=50
 warmup=10
 runnum=50
-nodenum=2
+nodenum=4
 
 #other
 correct=0
