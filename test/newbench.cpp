@@ -8,6 +8,7 @@
 #include "uniform_generator.h"
 #include "zipf.h"
 
+#include <fstream>
 #include <algorithm>
 #include <city.h>
 #include <cmath>
@@ -38,6 +39,8 @@ extern uint64_t cache_hit[MAX_APP_THREAD][8];
 } // namespace sherman
 int kMaxThread = 32;
 std::thread th[MAX_APP_THREAD];
+uint64_t latency[MAX_APP_THREAD][LATENCY_WINDOWS]{0};
+uint64_t latency_th_all[LATENCY_WINDOWS]{0};
 uint64_t tp[MAX_APP_THREAD][8];
 uint64_t total_tp[MAX_APP_THREAD];
 // uint64_t total_time[kMaxThread];
@@ -242,10 +245,12 @@ void thread_run(int id) {
   counter = 0;
   success_counter = 0;
   auto start = std::chrono::high_resolution_clock::now();
+  Timer thread_timer;
   while (counter < thread_op_num) {
     uint64_t key = thread_workload_array[counter];
     op_type cur_op = static_cast<op_type>(key >> 56);
     key = key & op_mask;
+    thread_timer.begin();
     switch (cur_op) {
     case op_type::Lookup: {
       Value v = key;
@@ -283,7 +288,12 @@ void thread_run(int id) {
     default:
       std::cout << "OP Type NOT MATCH!" << std::endl;
     }
-
+    auto us_10 = thread_timer.end() / 100;
+    if (us_10 >= LATENCY_WINDOWS)
+    {
+      us_10 = LATENCY_WINDOWS - 1;
+    }
+    latency[id][us_10]++;
     tp[id][0]++;
     ++counter;
     // if (counter % 1000000 == 0) {
@@ -787,6 +797,35 @@ void generate_workload() {
   std::cout << "Finish all workload generation" << std::endl;
 }
 
+void save_latency(int epoch_id)
+{
+  // sum up local latency cnt
+  for (int i = 0; i < LATENCY_WINDOWS; ++i)
+  {
+    latency_th_all[i] = 0;
+    for (int k = 0; k < MAX_APP_THREAD; ++k) {
+      latency_th_all[i] += latency[k][i];
+    }
+  }
+  // store in file
+  std::ofstream f_out("../us_lat/epoch_" + std::to_string(epoch_id) + ".lat");
+  f_out << std::setiosflags(std::ios::fixed) << std::setprecision(1);
+  if (f_out.is_open())
+  {
+    for (int i = 0; i < LATENCY_WINDOWS; ++i)
+    {
+      f_out << i / 10.0 << "\t" << latency_th_all[i] << std::endl;
+    }
+    f_out.close();
+  }
+  else
+  {
+    printf("Fail to write file!\n");
+    assert(false);
+  }
+  memset(latency, 0, sizeof(uint64_t) * MAX_APP_THREAD * LATENCY_WINDOWS);
+}
+
 int main(int argc, char *argv[]) {
   bindCore(0);
   numa_set_preferred(0);
@@ -933,6 +972,7 @@ int main(int argc, char *argv[]) {
 
         // uint64_t cluster_tp = 0;
         printf("%d, throughput %.4f\n", dsm->getMyNodeID(), per_node_tp);
+        save_latency(iter);
 
         if (dsm->getMyNodeID() == 0) {
           printf("cluster throughput %.3f\n", cluster_tp / 1000.0);
