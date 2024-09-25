@@ -51,7 +51,7 @@ do
         do  
             for t in 6
             do
-                ./restartMemc.sh
+                # ./restartMemc.sh
                 sudo ../build/newbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[1]} ${cache[3]} $uni ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
                 sleep 2
             done
