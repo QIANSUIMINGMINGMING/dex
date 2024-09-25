@@ -26,7 +26,7 @@ bool createContext(RdmaContext *context, uint8_t port, int gidIndex,
 
   for (int i = 0; i < devicesNum; ++i) {
     // printf("Device %d: %s\n", i, ibv_get_device_name(deviceList[i]));
-    if (ibv_get_device_name(deviceList[i])[5] == '0') {
+    if (ibv_get_device_name(deviceList[i])[5] == '2') {
       // if (ibv_get_device_name(deviceList[i]) == "mlx5_1") {
       //      printf("Device %d: %s\n", i, ibv_get_device_name(deviceList[i]));
       devIndex = i;
