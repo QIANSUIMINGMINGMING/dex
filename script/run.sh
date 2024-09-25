@@ -1,11 +1,11 @@
 #!/bin/bash
 
 #ops
-read=(100 50 95 0 0)
-insert=(0 0 0 100 5)
-update=(0 50 5 0 0)
-delete=(0 0 0 0 0)
-range=(0 0 0 0 95)
+read=(100 50 95 0 0 40)
+insert=(0 0 0 100 5 20)
+update=(0 50 5 0 0 20)
+delete=(0 0 0 0 0 20)
+range=(0 0 0 0 95 0)
 
 #fixed-op
 readonly=(100 0 0 0 0)
@@ -45,7 +45,7 @@ SELF_IP=$(hostname -I | awk '{print $1}')
 
 for uni in 0
 do 
-    for op in 1
+    for op in 5
     do 
         for idx in 2
         do  
