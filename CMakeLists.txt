@@ -3,6 +3,8 @@ project(DEX)
 
 # set (CMAKE_C_COMPILER "/usr/local/openmpi/bin/mpicxx")
 # set (CMAKE_CXX_COMPILER ${CMAKE_C_COMPILER})
+set(CMAKE_C_COMPILER "/usr/bin/gcc-13")
+set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
 
 add_definitions(-UNDEBUG)
 
@@ -19,8 +21,10 @@ endif()
 # set(CMAKE_C_FLAGS "-Wall -Wno-deprecated-declarations -Wsign-compare -DNDEBUG -g")
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++17")
 
+find_package(TBB REQUIRED tbb tbbmalloc)
+
 # Link Options
-set(LINKS_FLAGS "-lcityhash -lboost_system -lboost_coroutine -lpthread -libverbs -lmemcached -ltbb -lnuma")
+set(LINKS_FLAGS "-lcityhash -lboost_system -lboost_coroutine -lpthread -libverbs -lmemcached -lnuma")
 
 # option (SANITIZE "Turn on sanitization" ON)
 # if (SANITIZE)
@@ -45,6 +49,7 @@ file(GLOB TEST_SRC ${PROJECT_SOURCE_DIR}/test/*.cpp)
 foreach (TEST ${TEST_SRC})
     get_filename_component(TEST_NAME ${TEST} NAME_WE)
     add_executable(${TEST_NAME} ${TEST})
-    target_link_libraries(${TEST_NAME} ${LINKS_FLAGS})
+    target_include_directories(${TEST_NAME} PUBLIC ${TBB_INCLUDE_DIRS})   
+    target_link_libraries(${TEST_NAME} ${LINKS_FLAGS} TBB::tbb TBB::tbbmalloc)
 endforeach()
 
