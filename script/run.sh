@@ -2,9 +2,9 @@
 
 #ops
 read=(100 50 95 0 0 40)
-insert=(0 0 0 100 5 20)
-update=(0 50 5 0 0 20)
-delete=(0 0 0 0 0 20)
+insert=(0 0 0 100 5 30)
+update=(0 50 5 0 0 30)
+delete=(0 0 0 0 0 0)
 range=(0 0 0 0 95 0)
 
 #fixed-op
@@ -43,9 +43,9 @@ SELF_IP=$(hostname -I | awk '{print $1}')
 #     sleep 5
 # fi
 
-for uni in 1
+for uni in 0
 do 
-    for op in 4
+    for op in 5
     do 
         for idx in 1
         do  
