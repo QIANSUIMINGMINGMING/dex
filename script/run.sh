@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #ops
-read=(100 50 95 0 0 40)
+read=(100 0 95 0 0 40)
 insert=(0 0 0 100 5 20)
-update=(0 50 5 0 0 20)
+update=(0 100 5 0 0 20)
 delete=(0 0 0 0 0 20)
 range=(0 0 0 0 95 0)
 
@@ -47,7 +47,7 @@ for uni in 0
 do 
     for op in 1
     do 
-        for idx in 1
+        for idx in 2
         do  
             for t in 6
             do
