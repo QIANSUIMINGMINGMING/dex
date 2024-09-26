@@ -32,7 +32,7 @@ cluster_ips = [
 ][:node_num]
 
 lat_cnt = dict()
-lat_dir = Path(__file__).resolve().parent
+lat_dir = "/home/muxi/dex/us_lat"
 print(f'latency_dir: {lat_dir}')
 
 
@@ -40,7 +40,7 @@ def get_sftp_client(hostname):
   port = 22
   client = paramiko.SSHClient()
   client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-  client.connect(hostname, port, compress=True)
+  client.connect(hostname, port,username="muxi", compress=True)
   return client.open_sftp()
 
 
