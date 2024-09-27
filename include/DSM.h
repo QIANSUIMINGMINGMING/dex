@@ -130,18 +130,17 @@ public:
 
   // Create a random number
   uint32_t get_random_id(int id) {
-    // static thread_local std::mt19937 *generator = nullptr;
-    // if (!generator)
-    //   generator = new std::mt19937(clock() + pthread_self());
-    // static thread_local std::uniform_int_distribution<int> distribution(
-    //     0, conf.machineNR - 1);
+    static thread_local std::mt19937 *generator = nullptr;
+    if (!generator)
+      generator = new std::mt19937(clock() + pthread_self());
+    static thread_local std::uniform_int_distribution<int> distribution(
+        0, conf.machineNR - 1);
 
-    // auto idx = distribution(*generator);
-    // while (idx == id) {
-    //   idx = distribution(*generator);
-    // }
-    // return idx;
-    return 0;
+    auto idx = distribution(*generator);
+    while (idx == id) {
+      idx = distribution(*generator);
+    }
+    return idx;
   }
 
   uint64_t sum(uint64_t value) {
