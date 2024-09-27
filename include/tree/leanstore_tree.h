@@ -582,6 +582,9 @@ public:
       if (node.nodeID == node_id) {
         std::cout << "Existing ID = " << node.nodeID << std::endl;
         std::cout << "New ID = " << node_id << std::endl;
+      } else {
+        std::cout << "Existing ID = " << node.nodeID << std::endl;
+        std::cout << "New ID = " << node_id << std::endl;
       }
       assert(node.nodeID != node_id);
       // last-level node movement
