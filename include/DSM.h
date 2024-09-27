@@ -383,9 +383,8 @@ public:
 };
 
 inline GlobalAddress DSM::alloc(size_t size) {
-  // thread_local int next_target_node =
-  //     (getMyThreadID() + getMyNodeID()) % conf.machineNR;
-  thread_local int next_target_node = 0;
+  thread_local int next_target_node =
+      (getMyThreadID() + getMyNodeID()) % conf.machineNR;
   thread_local int next_target_dir_id =
       (getMyThreadID() + getMyNodeID()) % memThreadCount;
 
