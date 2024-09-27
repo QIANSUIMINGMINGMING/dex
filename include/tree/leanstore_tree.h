@@ -579,7 +579,6 @@ public:
         assert(ret == true);
       }
     } else {
-      assert(false);
       if (node.nodeID == node_id) {
         std::cout << "Existing ID = " << node.nodeID << std::endl;
         std::cout << "New ID = " << node_id << std::endl;
