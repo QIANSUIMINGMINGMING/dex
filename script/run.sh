@@ -12,7 +12,7 @@ readonly=(100 0 0 0 0)
 updateonly=(0 0 100 0 0)
 
 #exp
-threads=(0 2 18 36 72 108 146)
+threads=(0 2 18 36 72 108 144)
 #threads=(0 2 16 32 64 96 128)
 mem_threads=(0 1)
 cache=(0 64 128 256 512 1024)
@@ -21,7 +21,7 @@ zipf=(0.99)
 bulk=50
 warmup=10
 runnum=50
-nodenum=5
+nodenum=4
 
 #other
 correct=0
@@ -49,7 +49,7 @@ do
     do 
         for idx in 0
         do  
-            for t in 6
+            for t in 5
             do
                 # ./restartMemc.sh
                 sudo ../build/newbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[1]} ${cache[3]} $uni ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
