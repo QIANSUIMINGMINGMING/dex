@@ -34,9 +34,9 @@
 
 #define UNUSED(x) (void)(x)
 
-#define MAX_MACHINE 4
+#define MAX_MACHINE 5
 
-#define MEMORY_NODE_NUM 4
+#define MEMORY_NODE_NUM 5
 
 #define ADD_ROUND(x, n) ((x) = ((x) + 1) % (n))
 
