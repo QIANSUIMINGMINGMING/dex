@@ -63,6 +63,7 @@ void Directory::dirThread() {
 }
 
 void Directory::process_message(const RawMessage *m) {
+  assert(m->addr.nodeID == 3);
   RawMessage *send = nullptr;
   switch (m->type) {
 
