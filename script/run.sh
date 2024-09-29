@@ -45,7 +45,7 @@ SELF_IP=$(hostname -I | awk '{print $1}')
 
 for uni in 0
 do 
-    for op in 5
+    for op in 1
     do 
         for idx in 0
         do  
