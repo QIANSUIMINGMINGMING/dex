@@ -66,7 +66,7 @@ void Directory::process_message(const RawMessage *m) {
   if (m->addr.nodeID != 3) {
     printf("m node ID %llu", m->addr.nodeID);
   }
-  assert(m->addr.nodeID == 3);
+  assert((int)m->addr.nodeID == 3);
   RawMessage *send = nullptr;
   switch (m->type) {
 
