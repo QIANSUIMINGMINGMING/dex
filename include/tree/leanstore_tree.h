@@ -659,9 +659,9 @@ public:
           // We do not release the lock for mem_new_inner, instead we do the
           // recursive movement
           auto new_mega_root = get_global_address(newInner);
-          // recursive_movement_single(new_mega_root,
-          //                           reinterpret_cast<NodeBase *>(mem_new_inner),
-          //                           megaLevel - 1, new_mega_root.nodeID);
+          recursive_movement_single(new_mega_root,
+                                    reinterpret_cast<NodeBase *>(mem_new_inner),
+                                    megaLevel - 1, new_mega_root.nodeID);
           mem_new_inner->writeUnlock();
         } else {
           Key sep;
