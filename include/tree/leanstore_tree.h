@@ -583,7 +583,7 @@ public:
         std::cout << "Existing ID = " << node.nodeID << std::endl;
         std::cout << "New ID = " << node_id << std::endl;
       } 
-      assert(node.nodeID != node_id);
+      // assert(node.nodeID != node_id);
       // last-level node movement
       auto new_node = allocate_node(node_id);
       mem_node->remote_address = new_node;

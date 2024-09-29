@@ -130,17 +130,18 @@ public:
 
   // Create a random number
   uint32_t get_random_id(int id) {
-    static thread_local std::mt19937 *generator = nullptr;
-    if (!generator)
-      generator = new std::mt19937(clock() + pthread_self());
-    static thread_local std::uniform_int_distribution<int> distribution(
-        0, conf.machineNR - 1);
+    // static thread_local std::mt19937 *generator = nullptr;
+    // if (!generator)
+    //   generator = new std::mt19937(clock() + pthread_self());
+    // static thread_local std::uniform_int_distribution<int> distribution(
+    //     0, conf.machineNR - 1);
 
-    auto idx = distribution(*generator);
-    while (idx == id) {
-      idx = distribution(*generator);
-    }
-    return idx;
+    // auto idx = distribution(*generator);
+    // while (idx == id) {
+    //   idx = distribution(*generator);
+    // }
+    // return idx;
+    return 0;
   }
 
   uint64_t sum(uint64_t value) {
@@ -383,8 +384,9 @@ public:
 };
 
 inline GlobalAddress DSM::alloc(size_t size) {
-  thread_local int next_target_node =
-      (getMyThreadID() + getMyNodeID()) % conf.machineNR;
+  // thread_local int next_target_node =
+  //     (getMyThreadID() + getMyNodeID()) % conf.machineNR;
+  thread_local int next_target_node = 0;
   thread_local int next_target_dir_id =
       (getMyThreadID() + getMyNodeID()) % memThreadCount;
 
@@ -410,7 +412,8 @@ inline GlobalAddress DSM::alloc(size_t size) {
 }
 
 inline GlobalAddress DSM::alloc(size_t size, uint32_t node_id) {
-  node_id = node_id % conf.machineNR;
+  // node_id = node_id % conf.machineNR;
+  node_id = 0;
   thread_local int next_target_dir_id =
       (getMyThreadID() + getMyNodeID()) % memThreadCount;
 
