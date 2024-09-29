@@ -579,10 +579,10 @@ public:
         assert(ret == true);
       }
     } else {
-      if (node.nodeID == node_id) {
-        std::cout << "Existing ID = " << node.nodeID << std::endl;
-        std::cout << "New ID = " << node_id << std::endl;
-      } 
+      // if (node.nodeID == node_id) {
+      //   std::cout << "Existing ID = " << node.nodeID << std::endl;
+      //   std::cout << "New ID = " << node_id << std::endl;
+      // } 
       // assert(node.nodeID != node_id);
       // last-level node movement
       auto new_node = allocate_node(node_id);
