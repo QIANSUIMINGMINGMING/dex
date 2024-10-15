@@ -15,11 +15,11 @@ threads=(0 2 18 36 72 108 144)
 #threads=(0 2 16 32 64 96 128)
 mem_threads=(1 4)
 cache=(0 64 128 256 512 1024)
-uniform=(0 1)
+distribution=(0 1 2 3)
 zipf=(0.99)
-bulk=50
+bulk=200
 warmup=10
-runnum=50
+runnum=200
 nodenum=5
 
 #other
@@ -42,16 +42,16 @@ SELF_IP=$(hostname -I | awk '{print $1}')
 #     sleep 5
 # fi
 
-for uni in 0
+for dis in 0
 do 
-    for op in 1
+    for op in 0
     do 
         for idx in 0
         do  
-            for t in 6
+            for t in 1
             do
                 # ./restartMemc.sh
-                sudo ../build/newbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[3]} $uni ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
+                sudo ../build/newbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[3]} ${distribution[$dis]} ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
                 sleep 2
             done
         done
