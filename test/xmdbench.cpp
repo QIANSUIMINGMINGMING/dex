@@ -41,7 +41,7 @@ uint64_t latency_th_all[LATENCY_WINDOWS]{0};
 uint64_t tp[MAX_APP_THREAD][8];
 
 // uint64_t total_tp[MAX_APP_THREAD];
-double total_time[MAX_APP_THREAD];
+uint64_t total_time[MAX_APP_THREAD];
 
 std::mutex mtx;
 std::condition_variable cv;
@@ -707,7 +707,7 @@ void thread_run(int id) {
       std::chrono::duration_cast<std::chrono::microseconds>(end - start)
           .count();
 
-  total_time[id] = static_cast<double>(duration);
+  total_time[id] = static_cast<uint64_t>(duration);
   // The one who first finish should terminate all threads
   // To avoid the straggling thread
   if (early_stop && !one_finish.load()) {
@@ -1077,7 +1077,7 @@ int main(int argc, char *argv[]) {
 
       uint64_t XMDsetting_node_throughput =
           execute_op.load() /
-          (total_cluster_max_time / std::pow(10, 6));
+          (static_cast<double>(total_cluster_max_time) / std::pow(10, 6));
       uint64_t XMDsetting_cluster_throughput =
           dsm->sum_total(XMDsetting_node_throughput, CNodeCount, false);
 

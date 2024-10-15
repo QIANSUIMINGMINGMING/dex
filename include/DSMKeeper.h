@@ -99,7 +99,7 @@ public:
   uint64_t sum(const std::string &sum_key, uint64_t value, int node_num,
                bool time_out);
   uint64_t min(const std::string &max_key, uint64_t value, int node_num);
-  uint64_t max(const std::string &max_key, double value, int node_num);
+  uint64_t max(const std::string &max_key, uint64_t value, int node_num);
 };
 
 #endif
