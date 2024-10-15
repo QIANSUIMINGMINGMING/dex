@@ -20,7 +20,7 @@ zipf=(0.99)
 bulk=50
 warmup=10
 runnum=50
-nodenum=5
+nodenum=2
 
 #other
 correct=0
@@ -51,9 +51,11 @@ do
             for t in 6
             do
                 # ./restartMemc.sh
-                sudo ../build/newbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[3]} $uni ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
+                sudo gdb ../build/newbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[3]} $uni ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
                 sleep 2
             done
         done
     done
 done
+
+../build/newbench 5 50 0 50 0 0 144 4 256 0 0.99 50 10 50 0 1 1 0 1 0.1 0 36
