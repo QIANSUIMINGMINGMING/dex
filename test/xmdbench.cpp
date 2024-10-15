@@ -710,10 +710,10 @@ void thread_run(int id) {
   total_time[id] = static_cast<double>(duration);
   // The one who first finish should terminate all threads
   // To avoid the straggling thread
-  // if (early_stop && !one_finish.load()) {
-  //   one_finish.store(true);
-  //   per_thread_op_num = 0;
-  // }
+  if (early_stop && !one_finish.load()) {
+    one_finish.store(true);
+    per_thread_op_num = 0;
+  }
 
   worker.fetch_sub(1);
 

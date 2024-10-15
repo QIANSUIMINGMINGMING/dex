@@ -261,7 +261,7 @@ uint64_t DSMKeeper::max(const std::string &max_key, double value,
     key = key_prefix + std::to_string(i);
     auto mem_ret = memGet(key.c_str(), key.size(), nullptr, false);
     if (mem_ret != nullptr) {
-      auto cur_val = atof(mem_ret);
+      auto cur_val = *(double *)(mem_ret);
       if (cur_val > max) {
         max = cur_val;
       }
