@@ -225,7 +225,7 @@ uint64_t generate_key() {
     }
     if (key >= 0 && key < kKeySpace) {
       if (key_id < 10) {
-        std::cout<< key_id <<std::endl;
+        std::cout<< key <<std::endl;
       }
       key_id ++;
       break;
