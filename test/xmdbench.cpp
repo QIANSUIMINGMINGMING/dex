@@ -205,6 +205,8 @@ void init_key_generator() {
   }
 }
 
+static int key_id = 0;
+
 uint64_t generate_key() {
   // static int counter = 0;
   uint64_t key = 0;
@@ -222,6 +224,10 @@ uint64_t generate_key() {
       assert(false);
     }
     if (key >= 0 && key < kKeySpace) {
+      if (key_id < 10) {
+        std::cout<< key_id <<std::endl;
+      }
+      key_id ++;
       break;
     }
   }
@@ -378,7 +384,6 @@ void generate_workload() {
         i++;
         random_num = rng.next_uint32() % 100;
         uint64_t key = generate_key();
-
         if (key < left_bound && key >= right_bound) {
           continue;
         }
