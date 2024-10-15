@@ -141,7 +141,7 @@ public:
     //   idx = distribution(*generator);
     // }
     // return idx;
-    return 0;
+    return conf.machineNR - 1;
   }
 
   uint64_t sum(uint64_t value) {
@@ -386,7 +386,7 @@ public:
 inline GlobalAddress DSM::alloc(size_t size) {
   // thread_local int next_target_node =
   //     (getMyThreadID() + getMyNodeID()) % conf.machineNR;
-  thread_local int next_target_node = 3;
+  thread_local int next_target_node = conf.machineNR - 1;
   thread_local int next_target_dir_id =
       (getMyThreadID() + getMyNodeID()) % memThreadCount;
 
@@ -413,7 +413,7 @@ inline GlobalAddress DSM::alloc(size_t size) {
 
 inline GlobalAddress DSM::alloc(size_t size, uint32_t node_id) {
   // node_id = node_id % conf.machineNR;
-  node_id = 3;
+  node_id = conf.machineNR - 1;
   thread_local int next_target_dir_id =
       (getMyThreadID() + getMyNodeID()) % memThreadCount;
 
@@ -446,13 +446,15 @@ inline GlobalAddress DSM::alloc(size_t size, uint32_t node_id) {
 inline GlobalAddress DSM::smart_alloc(size_t size, bool align) {
   // thread_local int cur_target_node =
   //     (this->getMyThreadID() + this->getMyNodeID()) % MEMORY_NODE_NUM;
-  thread_local int cur_target_node =
-      (this->getMyThreadID() + this->getMyNodeID()) % conf.machineNR;
+  // thread_local int cur_target_node =
+  //     (this->getMyThreadID() + this->getMyNodeID()) % conf.machineNR;
+  thread_local int cur_target_node = conf.machineNR - 1;
   thread_local int cur_target_dir_id =
       (this->getMyThreadID() + this->getMyNodeID()) % NR_DIRECTORY;
   if (++cur_target_dir_id == NR_DIRECTORY) {
     // cur_target_node = (cur_target_node + 1) % MEMORY_NODE_NUM;
-    cur_target_node = (cur_target_node + 1) % conf.machineNR;
+    // cur_target_node = (cur_target_node + 1) % conf.machineNR;
+    cur_target_node = conf.machineNR - 1;
     cur_target_dir_id = 0;
   }
 

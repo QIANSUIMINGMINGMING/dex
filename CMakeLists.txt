@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10.2 FATAL_ERROR)
 project(DEX)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
 # set (CMAKE_C_COMPILER "/usr/local/openmpi/bin/mpicxx")
 # set (CMAKE_CXX_COMPILER ${CMAKE_C_COMPILER})
 set(CMAKE_C_COMPILER "/usr/bin/gcc-13")
