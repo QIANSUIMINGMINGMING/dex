@@ -609,23 +609,15 @@ int main(int argc, char *argv[]) {
   uint64_t straggler_cluster_tp = 0;
   uint64_t collect_times = 0;
 
-  dsm->resetThread();
-  generate_workload();
-  //   bulk_load();
-
-  if (auto_tune) {
-    run_times = admission_rate_vec.size() * rpc_rate_vec.size();
-  }
-
-  while (true) {
-
-  }
-
   if (node_id < CNodeCount) {
     dsm->registerThread();
     generate_index();
 
     dsm->barrier("bulkload", CNodeCount);
+    generate_workload();
+    if (auto_tune) {
+      run_times = admission_rate_vec.size() * rpc_rate_vec.size();
+    }
     while (true) {
     }
   }
