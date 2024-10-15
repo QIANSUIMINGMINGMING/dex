@@ -62,11 +62,11 @@ uint64_t threadKSpace;
 uint64_t partition_space;
 uint64_t left_bound = 0;
 uint64_t right_bound = 0;
-uint64_t op_num = 0;             // Total operation num
-uint64_t thread_op_num = 0;      // operation num for each thread
-uint64_t thread_warmup_num = 0;  // warmup op num for each thread
-uint64_t node_warmup_num = 0;
-uint64_t node_op_num = 0;
+uint64_t op_num = 0;  // Total operation num
+
+uint64_t per_node_op_num = 0;
+uint64_t per_node_warmup_num = 0;
+
 uint64_t *bulk_array = nullptr;
 uint64_t bulk_load_num = 0;
 uint64_t warmup_num = 0;  // 10M for warmup
@@ -205,7 +205,7 @@ void init_key_generator() {
   }
 }
 
-uint64_t generate_range_key() {
+uint64_t generate_key() {
   // static int counter = 0;
   uint64_t key = 0;
   while (true) {
@@ -221,9 +221,32 @@ uint64_t generate_range_key() {
     } else {
       assert(false);
     }
-    // if (key >= left_bound && key < right_bound) {
-    //   break;
-    // }
+    if (key >= 0 && key < kKeySpace) {
+      break;
+    }
+  }
+  return key;
+}
+
+uint64_t generate_key_range() {
+  // static int counter = 0;
+  uint64_t key = 0;
+  while (true) {
+    if (workload_type == WorkLoadType::uniform) {
+      uint64_t dis = uniform_generator->next_id();
+      key = to_key(dis);
+    } else if (workload_type == WorkLoadType::zipf) {
+      uint64_t dis = mehcached_zipf_next(&state);
+      key = to_key(dis);
+    } else if (workload_type == WorkLoadType::gaussian_01 ||
+               workload_type == WorkLoadType::gaussian_001) {
+      key = gaussian_generator->next_id();
+    } else {
+      assert(false);
+    }
+    if (key >= left_bound && key < right_bound) {
+      break;
+    }
   }
   return key;
 }
@@ -235,17 +258,14 @@ void generate_workload() {
     space_array[i] = i;
   }
   bulk_array = new uint64_t[bulk_load_num];
-  node_warmup_num = thread_warmup_num * kThreadCount;
-  node_op_num = thread_op_num * kThreadCount;
-  uint64_t warmup_insert_key_num = (kInsertRatio / 100.0) * node_warmup_num;
-  uint64_t workload_insert_key_num = (kInsertRatio / 100.0) * node_op_num;
-  uint64_t *insert_array = nullptr;
+  uint64_t thread_warmup_insert_num =
+      (kInsertRatio / 100.0) * (op_num / totalThreadCount);
+  uint64_t warmup_insert_key_num = thread_warmup_insert_num * kThreadCount;
 
-  //DEX
-  if (partitioned) {
-  } else { //others
-    partition_space = kKeySpace;
-  }
+  uint64_t thread_workload_insert_num =
+      (kInsertRatio / 100.0) * (op_num / totalThreadCount);
+  uint64_t workload_insert_key_num = thread_warmup_insert_num * kThreadCount;
+  uint64_t *insert_array = nullptr;
 
   if (partitioned) {
     left_bound = sharding[node_id];
@@ -300,10 +320,8 @@ void generate_workload() {
     memcpy(&bulk_array[0], &space_array[0], sizeof(uint64_t) * bulk_load_num);
 
     uint64_t regular_node_insert_num =
-        static_cast<uint64_t>(thread_warmup_num * kMaxThread *
-                              (kInsertRatio / 100.0)) +
-        static_cast<uint64_t>(thread_op_num * kMaxThread *
-                              (kInsertRatio / 100.0));
+        static_cast<uint64_t>(thread_warmup_insert_num * kMaxThread) +
+        static_cast<uint64_t>(workload_insert_key_num * kMaxThread);
     insert_array =
         space_array + bulk_load_num + regular_node_insert_num * node_id;
     assert((bulk_load_num + regular_node_insert_num * node_id +
@@ -326,8 +344,9 @@ void generate_workload() {
   assert(rangemark == 100);
 
   // auto updatemark = insertmark + kUpdateRatio;
-  std::cout << "node warmup num = " << node_warmup_num << std::endl;
-  warmup_array = new uint64_t[node_warmup_num];
+  std::cout << "node warmup insert num = " << warmup_insert_key_num
+            << std::endl;
+  warmup_array = new uint64_t[warmup_num];
   std::cout << "kReadRatio =" << kReadRatio << std::endl;
   std::cout << "insertmark =" << insertmark << std::endl;
   std::cout << "updatemark =" << updatemark << std::endl;
@@ -336,93 +355,153 @@ void generate_workload() {
 
   uint64_t i = 0;
   uint64_t insert_counter = 0;
+  per_node_warmup_num = 0;
+
   if (kInsertRatio == 100) {
     // "Load workload" => need to guarantee all keys are new key
     assert(workload_type == WorkLoadType::uniform);
-    while (i < node_warmup_num) {
+    while (i < warmup_insert_key_num) {
       uint64_t key = (insert_array[insert_counter] |
                       (static_cast<uint64_t>(op_type::Insert) << 56));
       warmup_array[i] = key;
       ++insert_counter;
       ++i;
     }
+    per_node_warmup_num = insert_counter;
     assert(insert_counter <= warmup_insert_key_num);
   } else {
-    while (i < node_warmup_num) {
-      random_num = rng.next_uint32() % 100;
-      uint64_t key = generate_range_key();
-      if (random_num < kReadRatio) {
-        key = key | (static_cast<uint64_t>(op_type::Lookup) << 56);
-      } else if (random_num < insertmark) {
-        key = key | (static_cast<uint64_t>(op_type::Insert) << 56);
-        // To guarantee insert key are new keys
-        // if (insert_counter < warmup_insert_key_num) {
-        //   uint64_t key = (insert_array[insert_counter] |
-        //                   (static_cast<uint64_t>(op_type::Insert) << 56));
-        //   warmup_array[i] = key;
-        //   ++insert_counter;
-        //   ++i;
-        // }
-      } else if (random_num < updatemark) {
-        key = key | (static_cast<uint64_t>(op_type::Update) << 56);
-      } else if (random_num < deletemark) {
-        key = key | (static_cast<uint64_t>(op_type::Delete) << 56);
-      } else {
-        key = key | (static_cast<uint64_t>(op_type::Range) << 56);
+    // DEX
+    if (partitioned) {
+      while (i < warmup_num) {
+        i++;
+        random_num = rng.next_uint32() % 100;
+        uint64_t key = generate_key();
+        if (key < left_bound && key >= right_bound) {
+          continue;
+        }
+        if (key)
+          if (random_num < kReadRatio) {
+            key = key | (static_cast<uint64_t>(op_type::Lookup) << 56);
+          } else if (random_num < insertmark) {
+            key = key | (static_cast<uint64_t>(op_type::Insert) << 56);
+          } else if (random_num < updatemark) {
+            key = key | (static_cast<uint64_t>(op_type::Update) << 56);
+          } else if (random_num < deletemark) {
+            key = key | (static_cast<uint64_t>(op_type::Delete) << 56);
+          } else {
+            key = key | (static_cast<uint64_t>(op_type::Range) << 56);
+          }
+        warmup_array[per_node_warmup_num] = key;
+        per_node_warmup_num++;
       }
-      warmup_array[i] = key;
-      ++i;
+    } else {
+      per_node_warmup_num = (warmup_num / totalThreadCount) * kThreadCount;
+      while (i < per_node_warmup_num) {
+        random_num = rng.next_uint32() % 100;
+        uint64_t key = generate_key_range();
+        if (key)
+          if (random_num < kReadRatio) {
+            key = key | (static_cast<uint64_t>(op_type::Lookup) << 56);
+          } else if (random_num < insertmark) {
+            key = key | (static_cast<uint64_t>(op_type::Insert) << 56);
+          } else if (random_num < updatemark) {
+            key = key | (static_cast<uint64_t>(op_type::Update) << 56);
+          } else if (random_num < deletemark) {
+            key = key | (static_cast<uint64_t>(op_type::Delete) << 56);
+          } else {
+            key = key | (static_cast<uint64_t>(op_type::Range) << 56);
+          }
+        warmup_array[i] = key;
+        ++i;
+      } 
     }
   }
+  std::cout << "node warmup num: " << per_node_warmup_num << std::endl;
 
   std::mt19937 gen(0xc70f6907UL);
-  std::shuffle(&warmup_array[0], &warmup_array[node_warmup_num - 1], gen);
-
+  std::shuffle(&warmup_array[0], &warmup_array[per_node_warmup_num - 1], gen);
   std::cout << "Finish warmup workload generation" << std::endl;
-  workload_array = new uint64_t[node_op_num];
+
+  workload_array = new uint64_t[op_num];
   i = 0;
   insert_array = insert_array + insert_counter;
   insert_counter = 0;
   std::unordered_map<uint64_t, uint64_t> key_count;
+
+  per_node_op_num = 0;
+
   if (kInsertRatio == 100) {
-    assert(workload_type != WorkLoadType::zipf);
-    while (i < node_op_num) {
+    assert(workload_type == WorkLoadType::uniform);
+    while (i < workload_insert_key_num) {
       uint64_t key = (insert_array[insert_counter] |
                       (static_cast<uint64_t>(op_type::Insert) << 56));
       workload_array[i] = key;
       ++insert_counter;
       ++i;
     }
+    per_node_op_num = insert_counter;
     assert(insert_counter <= workload_insert_key_num);
   } else {
-    while (i < node_op_num) {
-      random_num = rng.next_uint32() % 100;
-      uint64_t key = generate_range_key();
-      key_count[key]++;
-      if (random_num < kReadRatio) {
-        key = key | (static_cast<uint64_t>(op_type::Lookup) << 56);
-      } else if (random_num < insertmark) {
-        key = key | (static_cast<uint64_t>(op_type::Insert) << 56);
-        // if (insert_counter < workload_insert_key_num) {
-        //   uint64_t key = (insert_array[insert_counter] |
-        //                   (static_cast<uint64_t>(op_type::Insert) << 56));
-        //   workload_array[i] = key;
-        //   ++insert_counter;
-        //   ++i;
-        // }
-      } else if (random_num < updatemark) {
-        key = key | (static_cast<uint64_t>(op_type::Update) << 56);
-      } else if (random_num < deletemark) {
-        key = key | (static_cast<uint64_t>(op_type::Delete) << 56);
-      } else {
-        key = key | (static_cast<uint64_t>(op_type::Range) << 56);
+    // DEX
+    if (partitioned) {
+      while (i < op_num) {
+        i++;
+        random_num = rng.next_uint32() % 100;
+        uint64_t key = generate_key();
+        if (key < left_bound && key >= right_bound) {
+          continue;
+        }
+        if (key)
+          if (random_num < kReadRatio) {
+            key = key | (static_cast<uint64_t>(op_type::Lookup) << 56);
+          } else if (random_num < insertmark) {
+            key = key | (static_cast<uint64_t>(op_type::Insert) << 56);
+          } else if (random_num < updatemark) {
+            key = key | (static_cast<uint64_t>(op_type::Update) << 56);
+          } else if (random_num < deletemark) {
+            key = key | (static_cast<uint64_t>(op_type::Delete) << 56);
+          } else {
+            key = key | (static_cast<uint64_t>(op_type::Range) << 56);
+          }
+        workload_array[per_node_op_num] = key;
+        per_node_op_num++;
       }
-      workload_array[i] = key;
-      ++i;
-    }
+    } else {
+      per_node_op_num = (op_num / totalThreadCount) * kThreadCount;
+      while (i < per_node_op_num) {
+        random_num = rng.next_uint32() % 100;
+        uint64_t key = generate_key_range();
+        if (key)
+          if (random_num < kReadRatio) {
+            key = key | (static_cast<uint64_t>(op_type::Lookup) << 56);
+          } else if (random_num < insertmark) {
+            key = key | (static_cast<uint64_t>(op_type::Insert) << 56);
+          } else if (random_num < updatemark) {
+            key = key | (static_cast<uint64_t>(op_type::Update) << 56);
+          } else if (random_num < deletemark) {
+            key = key | (static_cast<uint64_t>(op_type::Delete) << 56);
+          } else {
+            key = key | (static_cast<uint64_t>(op_type::Range) << 56);
+          }
+        workload_array[i] = key;
+        ++i;
+      }
+    } 
   }
+  std::cout << "node op num: " << per_node_op_num << std::endl;
+  // std::shuffle(&workload_array[0], &workload_array[node_op_num - 1], gen);
 
-  std::cout << "node op_num = " << node_op_num << std::endl;
+  // std::vector<std::pair<uint64_t, uint64_t>> keyValuePairs;
+  // for (const auto &entry : key_count) {
+  //   keyValuePairs.push_back(entry);
+  // }
+  // std::sort(keyValuePairs.begin(), keyValuePairs.end(),
+  //           [](const auto &a, const auto &b) { return a.second > b.second;
+  //           });
+  // for (int i = 0; i < 20; ++i) {
+  //   std::cout << i << " key: " << keyValuePairs[i].first
+  //             << " counter: " << keyValuePairs[i].second << std::endl;
+  // }
   delete[] space_array;
   std::cout << "Finish all workload generation" << std::endl;
 }
@@ -467,10 +546,6 @@ void parse_args(int argc, char *argv[]) {
                                        // corretness of the tree after running
   time_based = atoi(argv[16]);
   early_stop = atoi(argv[17]);
-
-  // Get thread_op_num & thread_warmup_num
-  thread_op_num = op_num / totalThreadCount;
-  thread_warmup_num = warmup_num / totalThreadCount;
 
   tree_index = atoi(argv[18]);
   rpc_rate = atof(argv[19]);        // RPC rate for DEX
@@ -536,10 +611,14 @@ int main(int argc, char *argv[]) {
 
   dsm->resetThread();
   generate_workload();
-//   bulk_load();
+  //   bulk_load();
 
   if (auto_tune) {
     run_times = admission_rate_vec.size() * rpc_rate_vec.size();
+  }
+
+  while (true) {
+
   }
 
   if (node_id < CNodeCount) {
@@ -547,7 +626,8 @@ int main(int argc, char *argv[]) {
     generate_index();
 
     dsm->barrier("bulkload", CNodeCount);
-    while (true) {}
+    while (true) {
+    }
   }
 
   std::cout << "Before barrier finish" << std::endl;
