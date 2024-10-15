@@ -452,9 +452,9 @@ inline GlobalAddress DSM::alloc(size_t size, uint32_t node_id) {
 inline GlobalAddress DSM::smart_alloc(size_t size, bool align) {
   // thread_local int cur_target_node =
   //     (this->getMyThreadID() + this->getMyNodeID()) % MEMORY_NODE_NUM;
-  // thread_local int cur_target_node =
-  //     (this->getMyThreadID() + this->getMyNodeID()) % conf.machineNR;
-  thread_local int cur_target_node = conf.machineNR - 1;
+  thread_local int cur_target_node =
+      (this->getMyThreadID() + this->getMyNodeID()) % conf.machineNR;
+  // thread_local int cur_target_node = conf.machineNR - 1;
   thread_local int cur_target_dir_id =
       (this->getMyThreadID() + this->getMyNodeID()) % NR_DIRECTORY;
   if (++cur_target_dir_id == NR_DIRECTORY) {
