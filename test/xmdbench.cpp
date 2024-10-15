@@ -197,9 +197,9 @@ void init_key_generator() {
     mehcached_zipf_init(&state, kKeySpace, zipfian,
                         (rdtsc() & (0x0000ffffffffffffull)) ^ node_id);
   } else if (workload_type == WorkLoadType::gaussian_01) {
-    gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.2);
+    gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.1 * kKeySpace);
   } else if (workload_type == WorkLoadType::gaussian_001) {
-    gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.02);
+    gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.01 * kKeySpace);
   } else {
     assert(false);
   }
