@@ -1080,9 +1080,10 @@ int main(int argc, char *argv[]) {
           (static_cast<double>(total_cluster_max_time) / std::pow(10, 6));
       uint64_t XMDsetting_cluster_throughput =
           dsm->sum_total(XMDsetting_node_throughput, CNodeCount, false);
+      
 
-      std::cout << "XMD node throughput: " << XMDsetting_node_throughput << std::endl;
-      std::cout << "XMD cluster throughput: " << XMDsetting_cluster_throughput <<std::endl;
+      std::cout << "XMD node throughput: " << (static_cast<double>(XMDsetting_node_throughput)/std::pow(10,6)) << " MOPS" << std::endl;
+      std::cout << "XMD cluster throughput: " << (static_cast<double>(XMDsetting_cluster_throughput)/std::pow(10,6)) <<" MOPS"<<std::endl;
 
       // uint64_t max_time = 0;
       // for (int i = 0; i < kThreadCount; ++i) {
