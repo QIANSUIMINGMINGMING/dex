@@ -1072,10 +1072,12 @@ int main(int argc, char *argv[]) {
       // }
       total_max_time = *std::max_element(total_time, total_time + kThreadCount);
       total_cluster_max_time = dsm->max_total(total_max_time, CNodeCount);
+      std::cout << "XMD node max time: " << total_max_time;
+      std::cout << "XMD cluster max time: " << total_cluster_max_time;
 
       uint64_t XMDsetting_node_throughput =
           execute_op.load() /
-          (static_cast<double>(total_cluster_max_time) / std::pow(10, 6));
+          (total_cluster_max_time / std::pow(10, 6));
       uint64_t XMDsetting_cluster_throughput =
           dsm->sum_total(XMDsetting_node_throughput, CNodeCount, false);
 
