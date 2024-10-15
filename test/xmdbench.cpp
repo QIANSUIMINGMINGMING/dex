@@ -372,10 +372,13 @@ void generate_workload() {
   } else {
     // DEX
     if (partitioned) {
+      std::cout << "left bound: "<<left_bound << std::endl;
+      std::cout << "right bound: " << right_bound << std::endl;
       while (i < warmup_num) {
         i++;
         random_num = rng.next_uint32() % 100;
         uint64_t key = generate_key();
+
         if (key < left_bound && key >= right_bound) {
           continue;
         }
