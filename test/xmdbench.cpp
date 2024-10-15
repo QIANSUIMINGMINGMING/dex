@@ -39,8 +39,9 @@ std::thread th[MAX_APP_THREAD];
 uint64_t latency[MAX_APP_THREAD][LATENCY_WINDOWS]{0};
 uint64_t latency_th_all[LATENCY_WINDOWS]{0};
 uint64_t tp[MAX_APP_THREAD][8];
-uint64_t total_tp[MAX_APP_THREAD];
-// uint64_t total_time[kMaxThread];
+
+// uint64_t total_tp[MAX_APP_THREAD];
+double total_time[MAX_APP_THREAD];
 
 std::mutex mtx;
 std::condition_variable cv;
@@ -66,6 +67,8 @@ uint64_t op_num = 0;  // Total operation num
 
 uint64_t per_node_op_num = 0;
 uint64_t per_node_warmup_num = 0;
+uint64_t per_thread_op_num = 0;
+uint64_t per_thread_warmup_num = 0;
 
 uint64_t *bulk_array = nullptr;
 uint64_t bulk_load_num = 0;
@@ -190,6 +193,25 @@ void generate_index() {
   numa_set_localalloc();
 }
 
+void bulk_load() {
+  // Only one compute node is allowed to do the bulkloading
+  tree->bulk_load(bulk_array, bulk_load_num);
+  if (partitioned && dsm->getMyNodeID() == 0) {
+    assert(sharding.size() == (CNodeCount + 1));
+    std::vector<Key> bound;
+    for (int i = 0; i < CNodeCount - 1; ++i) {
+      bound.push_back(sharding[i + 1]);
+    }
+    tree->set_shared(bound);
+    tree->get_basic();
+  }
+  tree->set_bound(left_bound, right_bound);
+  std::cout << "Left bound = " << left_bound
+            << ", right bound = " << right_bound << std::endl;
+  delete[] bulk_array;
+  printf("node %d finish its bulkload\n", dsm->getMyNodeID());
+}
+
 void init_key_generator() {
   if (workload_type == WorkLoadType::uniform) {
     uniform_generator = new uniform_key_generator_t(kKeySpace);
@@ -197,9 +219,11 @@ void init_key_generator() {
     mehcached_zipf_init(&state, kKeySpace, zipfian,
                         (rdtsc() & (0x0000ffffffffffffull)) ^ node_id);
   } else if (workload_type == WorkLoadType::gaussian_01) {
-    gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.1 * kKeySpace);
+    gaussian_generator =
+        new gaussian_key_generator_t(0.4 * kKeySpace, 0.1 * kKeySpace);
   } else if (workload_type == WorkLoadType::gaussian_001) {
-    gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.04 * kKeySpace);
+    gaussian_generator =
+        new gaussian_key_generator_t(0.4 * kKeySpace, 0.04 * kKeySpace);
   } else {
     assert(false);
   }
@@ -225,9 +249,9 @@ uint64_t generate_key() {
     }
     if (key >= 0 && key < kKeySpace) {
       if (key_id < 10) {
-        std::cout<< key <<std::endl;
+        std::cout << key << std::endl;
       }
-      key_id ++;
+      key_id++;
       break;
     }
   }
@@ -378,7 +402,7 @@ void generate_workload() {
   } else {
     // DEX
     if (partitioned) {
-      std::cout << "left bound: "<<left_bound << std::endl;
+      std::cout << "left bound: " << left_bound << std::endl;
       std::cout << "right bound: " << right_bound << std::endl;
       while (i < warmup_num) {
         i++;
@@ -421,7 +445,7 @@ void generate_workload() {
           }
         warmup_array[i] = key;
         ++i;
-      } 
+      }
     }
   }
   std::cout << "node warmup num: " << per_node_warmup_num << std::endl;
@@ -496,10 +520,14 @@ void generate_workload() {
         workload_array[i] = key;
         ++i;
       }
-    } 
+    }
   }
   std::cout << "node op num: " << per_node_op_num << std::endl;
   // std::shuffle(&workload_array[0], &workload_array[node_op_num - 1], gen);
+  per_thread_op_num = per_node_op_num / kThreadCount;
+  per_thread_warmup_num = per_node_warmup_num / kThreadCount;
+  std::cout << "thread op num: " << per_thread_op_num;
+  std::cout << "and thread warm num: " << per_thread_warmup_num << std::endl;
 
   // std::vector<std::pair<uint64_t, uint64_t>> keyValuePairs;
   // for (const auto &entry : key_count) {
@@ -514,6 +542,229 @@ void generate_workload() {
   // }
   delete[] space_array;
   std::cout << "Finish all workload generation" << std::endl;
+}
+
+void thread_run(int id) {
+  // Interleave the thread binding
+  bindCore(id);
+  // numa_set_localalloc();
+  //  std::cout << "Before register the thread" << std::endl;
+  dsm->registerThread();
+  tp[id][0] = 0;
+  // total_tp[id] = 0;
+  total_time[id] = 0;
+  uint64_t my_id = kMaxThread * node_id + id;
+  worker.fetch_add(1);
+  printf("I am %lu\n", my_id);
+
+  // auto idx = cur_run % rpc_rate_vec.size();
+  // cachepush::decision.clear();
+  // cachepush::decision.set_total_num(total_num[idx]);
+  // Every thread set its own warmup/workload range
+  uint64_t *thread_workload_array = workload_array + id * per_thread_op_num;
+  uint64_t *thread_warmup_array = warmup_array + id * per_thread_warmup_num;
+  // uint64_t *thread_workload_array = new uint64_t[thread_op_num];
+  // uint64_t *thread_warmup_array = new uint64_t[thread_warmup_num];
+  // memcpy(thread_workload_array, thread_workload_array_in_global,
+  //        sizeof(uint64_t) * thread_op_num);
+  // memcpy(thread_warmup_array, thread_warmup_array_in_global,
+  //        sizeof(uint64_t) * thread_warmup_num);
+  size_t counter = 0;
+  size_t success_counter = 0;
+  uint32_t scan_num = 100;
+  std::pair<Key, Value> *result = new std::pair<Key, Value>[scan_num];
+
+  while (counter < per_thread_warmup_num) {
+    uint64_t key = thread_warmup_array[counter];
+    op_type cur_op = static_cast<op_type>(key >> 56);
+    key = key & op_mask;
+    switch (cur_op) {
+      case op_type::Lookup: {
+        Value v = key;
+        auto flag = tree->lookup(key, v);
+        if (flag) ++success_counter;
+      } break;
+
+      case op_type::Insert: {
+        Value v = key + 1;
+        auto flag = tree->insert(key, v);
+        if (flag) ++success_counter;
+      } break;
+
+      case op_type::Update: {
+        Value v = key;
+        auto flag = tree->update(key, v);
+        if (flag) ++success_counter;
+      } break;
+
+      case op_type::Delete: {
+        auto flag = tree->remove(key);
+        if (flag) ++success_counter;
+      } break;
+
+      case op_type::Range: {
+        auto flag = tree->range_scan(key, scan_num, result);
+        if (flag) ++success_counter;
+      } break;
+
+      default:
+        std::cout << "OP Type NOT MATCH!" << std::endl;
+    }
+    ++counter;
+  }
+  //}
+
+  warmup_cnt.fetch_add(1);
+  if (id == 0) {
+    std::cout << "Thread_op_num = " << per_thread_op_num << std::endl;
+    while (warmup_cnt.load() != kThreadCount);
+    // delete[] warmup_array;
+    // if (cur_run == (run_times - 1)) {
+    //   delete[] warmup_array;
+    //   delete[] workload_array;
+    // }
+    printf("node %d finish warmup\n", dsm->getMyNodeID());
+    if (auto_tune) {
+      auto idx = cur_run % rpc_rate_vec.size();
+      assert(idx >= 0 && idx < rpc_rate_vec.size());
+      tree->set_rpc_ratio(rpc_rate_vec[idx]);
+      std::cout << "RPC ratio = " << rpc_rate_vec[idx] << std::endl;
+    } else {
+      tree->set_rpc_ratio(rpc_rate);
+    }
+    dsm->clear_rdma_statistic();
+    tree->clear_statistic();
+    dsm->barrier(std::string("warm_finish") + std::to_string(cur_run),
+                 CNodeCount);
+    ready.store(true);
+    warmup_cnt.store(0);
+  }
+
+  // Sync to the main thread
+  while (!ready_to_report.load());
+
+  // std::cout << "My thread ID = " << dsm->getMyThreadID() << std::endl;
+  // std::cout << "Thread op num = " << thread_op_num << std::endl;
+
+  // Start the real execution of the workload
+  counter = 0;
+  success_counter = 0;
+  auto start = std::chrono::high_resolution_clock::now();
+  Timer thread_timer;
+  while (counter < per_thread_op_num) {
+    uint64_t key = thread_workload_array[counter];
+    op_type cur_op = static_cast<op_type>(key >> 56);
+    key = key & op_mask;
+    thread_timer.begin();
+    switch (cur_op) {
+      case op_type::Lookup: {
+        Value v = key;
+        auto flag = tree->lookup(key, v);
+        if (flag) ++success_counter;
+      } break;
+
+      case op_type::Insert: {
+        Value v = key + 1;
+        auto flag = tree->insert(key, v);
+        if (flag) ++success_counter;
+      } break;
+
+      case op_type::Update: {
+        Value v = key;
+        auto flag = tree->update(key, v);
+        if (flag) ++success_counter;
+      } break;
+
+      case op_type::Delete: {
+        auto flag = tree->remove(key);
+        if (flag) ++success_counter;
+      } break;
+
+      case op_type::Range: {
+        auto flag = tree->range_scan(key, scan_num, result);
+        if (flag) ++success_counter;
+      } break;
+
+      default:
+        std::cout << "OP Type NOT MATCH!" << std::endl;
+    }
+    auto us_10 = thread_timer.end() / 100;
+    if (us_10 >= LATENCY_WINDOWS) {
+      us_10 = LATENCY_WINDOWS - 1;
+    }
+    latency[id][us_10]++;
+    tp[id][0]++;
+    ++counter;
+    // if (counter % 1000000 == 0) {
+    //   std::cout << "Thread ID = " << id << "--------------------------------"
+    //             << std::endl;
+    //   cachepush::decision.show_statistic();
+    //   std::cout << "-------------------------------------" << std::endl;
+    // }
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+          .count();
+
+  total_time[id] = static_cast<double>(duration);
+  // The one who first finish should terminate all threads
+  // To avoid the straggling thread
+  // if (early_stop && !one_finish.load()) {
+  //   one_finish.store(true);
+  //   per_thread_op_num = 0;
+  // }
+
+  worker.fetch_sub(1);
+
+  // uint64_t throughput =
+  //     counter / (static_cast<double>(duration) / std::pow(10, 6));
+  // total_tp[id] = throughput;  // (ops/s)
+  // total_time[id] = static_cast<uint64_t>(duration);
+  // std::cout << "Success ratio = "
+  //           << success_counter / static_cast<double>(counter) << std::endl;
+  execute_op.fetch_add(counter);
+  // if (cachepush::total_sample_times != 0) {
+  //   std::cout << "Node search time(ns) = "
+  //             << cachepush::total_nanoseconds / cachepush::total_sample_times
+  //             << std::endl;
+  //   std::cout << "Sample times = " << cachepush::total_sample_times
+  //             << std::endl;
+  // }
+  // std::cout << "Real rpc ratio = " << tree->get_rpc_ratio() << std::endl;
+  uint64_t first_not_found_key = 0;
+  bool not_found = false;
+#ifdef CHECK_CORRECTNESS
+  if (check_correctness && id == 0) {
+    while (worker.load() != 0);
+    uint64_t success_counter = 0;
+    uint64_t num_not_found = 0;
+    for (uint64_t i = left_bound; i < right_bound; i++) {
+      Key k = i;
+      Value v = i;
+      //  std::cout << "Check k " << k << std::endl;
+      auto flag = tree->lookup(k, v);
+      if (flag && (v == (k + 1) || (v == k)))
+        ++success_counter;
+      else {
+        // std::cout << "KEY " << k << std::endl;
+        //  exit(0);
+        if (!not_found) {
+          first_not_found_key = i;
+          not_found = true;
+        }
+        ++num_not_found;
+      }
+    }
+    std::cout << "Validation CHECK: Success counter = " << success_counter
+              << std::endl;
+    std::cout << "Validation CHECK: Not found counter = " << num_not_found
+              << std::endl;
+    std::cout << "First not found key = " << first_not_found_key << std::endl;
+    std::cout << "Validation CHECK: Success_counter/kKeySpace = "
+              << success_counter / static_cast<double>(kKeySpace) << std::endl;
+  }
+#endif
 }
 
 void parse_args(int argc, char *argv[]) {
@@ -615,6 +866,8 @@ int main(int argc, char *argv[]) {
 
   double collect_throughput = 0;
   uint64_t total_throughput = 0;
+  double total_max_time = 0;
+  double total_cluster_max_time = 0;
   uint64_t total_cluster_tp = 0;
   uint64_t straggler_cluster_tp = 0;
   uint64_t collect_times = 0;
@@ -624,12 +877,243 @@ int main(int argc, char *argv[]) {
     generate_index();
 
     dsm->barrier("bulkload", CNodeCount);
+    dsm->resetThread();
     generate_workload();
+    bulk_load();
+
     if (auto_tune) {
       run_times = admission_rate_vec.size() * rpc_rate_vec.size();
     }
-    while (true) {
-    }
+
+    while (cur_run < run_times) {
+      // Reset benchmark parameters
+      collect_throughput = 0;
+      total_throughput = 0;
+      total_max_time = 0;
+      total_cluster_tp = 0;
+      total_cluster_max_time = 0;
+      straggler_cluster_tp = 0;
+      collect_times = 0;
+
+      dsm->resetThread();
+      dsm->registerThread();
+      tree->reset_buffer_pool(true);
+      dsm->barrier(std::string("benchmark") + std::to_string(cur_run),
+                   CNodeCount);
+      tree->get_newest_root();
+      // In warmup phase, we do not use RPC
+      tree->set_rpc_ratio(0);
+      if (auto_tune) {
+        auto idx = cur_run / rpc_rate_vec.size();
+        assert(idx >= 0 && idx < admission_rate_vec.size());
+        tree->set_admission_ratio(admission_rate_vec[idx]);
+        std::cout << "Admission rate = " << admission_rate_vec[idx]
+                  << std::endl;
+      }
+
+      // Reset all parameters in thread_run
+      dsm->resetThread();
+      reset_all_params();
+      std::cout << node_id << " is ready for the benchmark" << std::endl;
+
+      for (int i = 0; i < kThreadCount; i++) {
+        th[i] = std::thread(thread_run, i);
+      }
+
+      // Warmup
+      auto start = std::chrono::high_resolution_clock::now();
+      while (!ready.load()) {
+        sleep(2);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration =
+            std::chrono::duration_cast<std::chrono::seconds>(end - start)
+                .count();
+        if (time_based && duration >= 30) {
+          per_thread_warmup_num = 0;
+        }
+      }
+
+      // Main thread is used to collect the statistics
+      timespec s, e;
+      uint64_t pre_tp = 0;
+      uint64_t pre_ths[MAX_APP_THREAD];
+      for (int i = 0; i < MAX_APP_THREAD; ++i) {
+        pre_ths[i] = 0;
+      }
+
+      ready_to_report.store(true);
+      clock_gettime(CLOCK_REALTIME, &s);
+      bool start_generate_throughput = false;
+
+      std::cout << "Start collecting the statistic" << std::endl;
+      start = std::chrono::high_resolution_clock::now();
+      // System::profile("dex-test", [&]() {
+      int iter = 0;
+      while (true) {
+        sleep(2);
+        clock_gettime(CLOCK_REALTIME, &e);
+        int microseconds = (e.tv_sec - s.tv_sec) * 1000000 +
+                           (double)(e.tv_nsec - s.tv_nsec) / 1000;
+
+        uint64_t all_tp = 0;
+        for (int i = 0; i < kThreadCount; ++i) {
+          all_tp += tp[i][0];
+        }
+
+        // Throughput in current phase (for very two seconds)
+        uint64_t cap = all_tp - pre_tp;
+        pre_tp = all_tp;
+
+        for (int i = 0; i < kThreadCount; ++i) {
+          auto val = tp[i][0];
+          pre_ths[i] = val;
+        }
+
+        uint64_t all = 0;
+        uint64_t hit = 0;
+        for (int i = 0; i < MAX_APP_THREAD; ++i) {
+          all += (sherman::cache_hit[i][0] + sherman::cache_miss[i][0]);
+          hit += sherman::cache_hit[i][0];
+        }
+
+        clock_gettime(CLOCK_REALTIME, &s);
+        double per_node_tp = cap * 1.0 / microseconds;
+
+        // FIXME(BT): use static counter for increment, need fix
+        // uint64_t cluster_tp =
+        //     dsm->sum((uint64_t)(per_node_tp * 1000), CNodeCount);
+        uint64_t cluster_tp =
+            dsm->sum_with_prefix(std::string("sum-") + std::to_string(cur_run) +
+                                     std::string("-") + std::to_string(iter),
+                                 (uint64_t)(per_node_tp * 1000), CNodeCount);
+
+        // uint64_t cluster_tp = 0;
+        printf("%d, throughput %.4f\n", dsm->getMyNodeID(), per_node_tp);
+        // save_latency(iter);
+
+        if (dsm->getMyNodeID() == 0) {
+          printf("cluster throughput %.3f\n", cluster_tp / 1000.0);
+
+          if (cluster_tp != 0) {
+            start_generate_throughput = true;
+          }
+
+          // Means this Cnode already finish the workload
+          if (start_generate_throughput && cluster_tp == 0) {
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration =
+                std::chrono::duration_cast<std::chrono::seconds>(end - start)
+                    .count();
+            std::cout << "The time duration = " << duration << " seconds"
+                      << std::endl;
+            break;
+          }
+
+          if (start_generate_throughput) {
+            ++collect_times;
+            collect_throughput += cluster_tp / 1000.0;
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration =
+                std::chrono::duration_cast<std::chrono::seconds>(end - start)
+                    .count();
+            if (time_based && duration > 60) {
+              std::cout << "Running time is larger than " << 60 << "seconds"
+                        << std::endl;
+              per_thread_op_num = 0;
+              break;
+            }
+          }
+
+          if (tree_index == 1) {
+            printf("cache hit rate: %lf\n", hit * 1.0 / all);
+          } else if (tree_index == 2) {
+            tree->get_statistic();
+          }
+        } else {
+          if (cluster_tp != 0) {
+            start_generate_throughput = true;
+          }
+
+          if (start_generate_throughput && per_node_tp == 0) break;
+
+          if (start_generate_throughput) {
+            ++collect_times;
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration =
+                std::chrono::duration_cast<std::chrono::seconds>(end - start)
+                    .count();
+            if (time_based && duration > 60) {
+              per_thread_op_num = 0;
+              break;
+            }
+          }
+
+          if (tree_index == 1) {
+            printf("cache hit rate: %lf\n", hit * 1.0 / all);
+          } else if (tree_index == 2) {
+            tree->get_statistic();
+          }
+        }
+        ++iter;
+      }  // while(true) loop
+         //});
+
+      sleep(2);
+      while (worker.load() != 0) {
+        sleep(2);
+      }
+
+      for (int i = 0; i < kThreadCount; i++) {
+        th[i].join();
+      }
+
+      // for (int i = 0; i < kThreadCount; ++i) {
+      //   total_max_time = std::max_element(total_time, total_time + k)
+      // }
+      total_max_time = *std::max_element(total_time, total_time + kThreadCount);
+      total_cluster_max_time = dsm->max_total(total_max_time, CNodeCount);
+
+      uint64_t XMDsetting_node_throughput =
+          execute_op.load() /
+          (static_cast<double>(total_cluster_max_time) / std::pow(10, 6));
+      uint64_t XMDsetting_cluster_throughput =
+          dsm->sum_total(XMDsetting_node_throughput, CNodeCount, false);
+
+      std::cout << "XMD node throughput: " << XMDsetting_node_throughput << std::endl;
+      std::cout << "XMD cluster throughput: " << XMDsetting_cluster_throughput <<std::endl;
+
+      // uint64_t max_time = 0;
+      // for (int i = 0; i < kThreadCount; ++i) {
+      //   max_time = std::max<uint64_t>(max_time, total_time[i]);
+      // }
+
+      total_cluster_tp = dsm->sum_total(total_throughput, CNodeCount, false);
+      straggler_cluster_tp =
+          dsm->min_total(total_throughput / kThreadCount, CNodeCount);
+      straggler_cluster_tp = straggler_cluster_tp * totalThreadCount;
+      // op_num /
+      // (static_cast<double>(straggler_cluster_tp) / std::pow(10, 6));
+#ifdef CHECK_CORRECTNESS
+      if (check_correctness) {
+        // std::cout << "------#RDMA read = " << dsm->num_read_rdma <<
+        // std::endl; std::cout << "------#RDMA write = " << dsm->num_write_rdma
+        // << std::endl; std::cout << "------#RDMA cas = " << dsm->num_cas_rdma
+        // << std::endl;
+        dsm->resetThread();
+        dsm->registerThread();
+        tree->validate();
+      }
+#endif
+      throughput_vec.push_back(total_cluster_tp);
+      straggler_throughput_vec.push_back(straggler_cluster_tp);
+      std::cout << "Round " << cur_run
+                << " (max_throughput): " << total_cluster_tp / std::pow(10, 6)
+                << " Mops/s" << std::endl;
+      std::cout << "Round " << cur_run << " (straggler_throughput): "
+                << straggler_cluster_tp / std::pow(10, 6) << " Mops/s"
+                << std::endl;
+      ++cur_run;
+    }  // multiple run loop
   }
 
   std::cout << "Before barrier finish" << std::endl;

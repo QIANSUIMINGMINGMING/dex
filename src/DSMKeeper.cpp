@@ -247,3 +247,26 @@ uint64_t DSMKeeper::min(const std::string &min_key, uint64_t value,
 
   return min;
 }
+
+uint64_t DSMKeeper::max(const std::string &max_key, double value,
+                        int node_num) {
+  std::string key_prefix = std::string("max-") + max_key;
+
+  std::string key = key_prefix + std::to_string(this->getMyNodeID());
+  memSet(key.c_str(), key.size(), (char *)&value, sizeof(value));
+
+  uint64_t ret = 0;
+  uint64_t max = 0;
+  for (int i = 0; i < node_num; ++i) {
+    key = key_prefix + std::to_string(i);
+    auto mem_ret = memGet(key.c_str(), key.size(), nullptr, false);
+    if (mem_ret != nullptr) {
+      auto cur_val = atof(mem_ret);
+      if (cur_val > max) {
+        max = cur_val;
+      }
+    }
+  }
+
+  return max;
+}

@@ -179,6 +179,12 @@ public:
                        value, node_num);
   }
 
+  uint64_t max_total(double value, int node_num) {
+    static uint64_t count = 0;
+    return keeper->max(std::string("max-total") + std::to_string(count++),
+                       value, node_num);
+  }
+
   // Memcached operations for sync
   size_t Put(uint64_t key, const void *value, size_t count) {
 
