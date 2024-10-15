@@ -199,7 +199,7 @@ void init_key_generator() {
   } else if (workload_type == WorkLoadType::gaussian_01) {
     gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.1 * kKeySpace);
   } else if (workload_type == WorkLoadType::gaussian_001) {
-    gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.01 * kKeySpace);
+    gaussian_generator = new gaussian_key_generator_t(0.4 * kKeySpace, 0.02 * kKeySpace);
   } else {
     assert(false);
   }
@@ -427,7 +427,9 @@ void generate_workload() {
   std::cout << "node warmup num: " << per_node_warmup_num << std::endl;
 
   std::mt19937 gen(0xc70f6907UL);
-  std::shuffle(&warmup_array[0], &warmup_array[per_node_warmup_num - 1], gen);
+  if (per_node_warmup_num > 0) {
+    std::shuffle(&warmup_array[0], &warmup_array[per_node_warmup_num - 1], gen);
+  }
   std::cout << "Finish warmup workload generation" << std::endl;
 
   workload_array = new uint64_t[op_num];
