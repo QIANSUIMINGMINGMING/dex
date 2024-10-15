@@ -384,7 +384,7 @@ void generate_workload() {
         i++;
         random_num = rng.next_uint32() % 100;
         uint64_t key = generate_key();
-        if (key < left_bound && key >= right_bound) {
+        if (key < left_bound || key >= right_bound) {
           continue;
         }
         if (key)
@@ -456,7 +456,7 @@ void generate_workload() {
         i++;
         random_num = rng.next_uint32() % 100;
         uint64_t key = generate_key();
-        if (key < left_bound && key >= right_bound) {
+        if (key < left_bound || key >= right_bound) {
           continue;
         }
         if (key)
