@@ -267,7 +267,7 @@ public:
     // }
     // node_addr.val = reinterpret_cast<uint64_t>(ret);
     // return node_addr;
-    auto node_addr = dsm_->alloc(pageSize, node_id);
+    auto node_addr = dsm_->alloc(pageSize, dsm_->getClusterSize() - 1);
     return node_addr;
   }
 
@@ -282,7 +282,7 @@ public:
   }
 
   GlobalAddress allocate_leaf_node(uint32_t node_id) {
-    auto node_addr = dsm_->alloc(pageSize, node_id);
+    auto node_addr = dsm_->alloc(pageSize, dsm_->getClusterSize() - 1);
     auto page_buffer = (dsm_->get_rbuf(0)).get_page_buffer();
     auto new_mem = new (page_buffer) BTreeLeaf<Key, Value>(node_addr);
     new_mem->typeVersionLockObsolete = 0;
@@ -292,7 +292,7 @@ public:
 
   GlobalAddress allocate_leaf_node(Key min_limit, Key max_limit,
                                    uint32_t node_id = 0) {
-    auto node_addr = dsm_->alloc(pageSize, node_id);
+    auto node_addr = dsm_->alloc(pageSize, dsm_->getClusterSize()-1);
     auto page_buffer = (dsm_->get_rbuf(0)).get_page_buffer();
     new (page_buffer) BTreeLeaf<Key, Value>(node_addr);
     auto cur_node = reinterpret_cast<BTreeLeaf<Key, Value> *>(page_buffer);
