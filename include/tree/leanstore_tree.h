@@ -6,27 +6,29 @@
  */
 #pragma once
 
-#include "../cache/leanstore_cache.h"
-#include "../tree_api.h"
+#include <immintrin.h>
+#include <inttypes.h>
+#include <sched.h>
+
 #include <atomic>
 #include <cassert>
 #include <cstring>
-#include <immintrin.h>
-#include <inttypes.h>
 #include <iostream>
 #include <limits>
 #include <list>
-#include <sched.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include "../cache/leanstore_cache.h"
+#include "../tree_api.h"
 
 namespace cachepush {
 uint64_t push_down_counter = 0;
 uint64_t cache_miss_counter = 0;
 uint64_t admission_counter = 0;
 uint64_t cache_miss_array[8] = {
-    0, 0, 0, 0, 0, 0, 0, 0}; // Collect the cache miss in bottom 5 levels
+    0, 0, 0, 0, 0, 0, 0, 0};  // Collect the cache miss in bottom 5 levels
 // In the memory side, we only maintain a BTree without any statistics
 // In the client, we maintain a LRU cache
 thread_local uint64_t total_nanoseconds = 0;
@@ -34,15 +36,16 @@ thread_local uint64_t total_sample_times = 0;
 
 // #define FINE_GRAINED 1
 
-template <class Key, class Value> class BTree : public tree_api<Key, Value> {
-public:
+template <class Key, class Value>
+class BTree : public tree_api<Key, Value> {
+ public:
   GlobalAddress root_ptr_ptr_;
-  GlobalAddress root_lock_ptr_; // To the global lock
+  GlobalAddress root_lock_ptr_;  // To the global lock
   GlobalAddress root;
-  OptLock root_lock_; // FIXME(BT): should be removed later
+  OptLock root_lock_;  // FIXME(BT): should be removed later
   uint64_t tree_id_;
   DSM *dsm_;
-  BTreeInner<Key> *super_root_; // which can be
+  BTreeInner<Key> *super_root_;  // which can be
 
   // Sharding Information;
   Key left_bound_;
@@ -218,7 +221,7 @@ public:
       reinterpret_cast<BTreeInner<Key> *>(mem_root)->set_bitmap(1);
     }
     remote_write_unswizzle(mem_root, true);
-    update_root_ptr(new_root, root); // This must succeed!
+    update_root_ptr(new_root, root);  // This must succeed!
     mem_root->parent_ptr = super_root_;
     height = mem_root->level + 1;
     mem_root->writeUnlock();
@@ -230,7 +233,7 @@ public:
 
   GlobalAddress get_root_ptr_ptr() {
     GlobalAddress addr;
-    addr.nodeID = 0;
+    addr.nodeID = dsm_->getClusterSize() - 1;
     addr.offset =
         define::kRootPointerStoreOffest + sizeof(GlobalAddress) * tree_id_;
     return addr;
@@ -238,7 +241,7 @@ public:
 
   GlobalAddress get_root_lock_ptr() {
     GlobalAddress addr;
-    addr.nodeID = 0;
+    addr.nodeID = dsm_->getClusterSize() - 1;
     addr.offset = define::kRootPointerStoreOffest +
                   sizeof(GlobalAddress) * (tree_id_ + 1);
     return addr;
@@ -292,7 +295,7 @@ public:
 
   GlobalAddress allocate_leaf_node(Key min_limit, Key max_limit,
                                    uint32_t node_id = 0) {
-    auto node_addr = dsm_->alloc(pageSize, dsm_->getClusterSize()-1);
+    auto node_addr = dsm_->alloc(pageSize, dsm_->getClusterSize() - 1);
     auto page_buffer = (dsm_->get_rbuf(0)).get_page_buffer();
     new (page_buffer) BTreeLeaf<Key, Value>(node_addr);
     auto cur_node = reinterpret_cast<BTreeLeaf<Key, Value> *>(page_buffer);
@@ -401,8 +404,7 @@ public:
     auto cas_buffer = (dsm_->get_rbuf(0)).get_cas_buffer();
     while (true) {
       auto ret = dsm_->cas_sync(lock, 0, tag, cas_buffer);
-      if (ret)
-        break;
+      if (ret) break;
     }
   }
 
@@ -582,7 +584,7 @@ public:
       // if (node.nodeID == node_id) {
       //   std::cout << "Existing ID = " << node.nodeID << std::endl;
       //   std::cout << "New ID = " << node_id << std::endl;
-      // } 
+      // }
       // assert(node.nodeID != node_id);
       // last-level node movement
       auto new_node = allocate_node(node_id);
@@ -702,8 +704,7 @@ public:
       mem_node = new_get_mem_node(inner->children[idx], inner, idx, versionNode,
                                   needRestart, refresh, true);
       assert(refresh == false);
-      if (needRestart)
-        goto restart;
+      if (needRestart) goto restart;
       assert(mem_node != nullptr);
     }
 
@@ -921,8 +922,7 @@ public:
     int restartCount = 0;
     bool verbose = false;
   restart:
-    if (restartCount++)
-      yield(restartCount);
+    if (restartCount++) yield(restartCount);
 
     bool needRestart = false;
     bool refresh = false;
@@ -1139,8 +1139,7 @@ public:
       }
 
       parent_read_unlock(parent, versionParent, needRestart);
-      if (needRestart)
-        goto restart;
+      if (needRestart) goto restart;
 
       parent = inner;
       versionParent = versionNode;
@@ -1193,8 +1192,7 @@ public:
       return false;
     }
 
-    if (remote_cur_node->front_version == cur_node->front_version)
-      return true;
+    if (remote_cur_node->front_version == cur_node->front_version) return true;
 
     refresh_cache = true;
     // Refresh fromt the root
@@ -1208,8 +1206,7 @@ public:
     if ((remote_root.val != cur_root.val) ||
         (cache.search_in_cache(root) == nullptr)) {
       auto remote_root_node = opt_remote_read(remote_root);
-      if (remote_root_node == nullptr)
-        return;
+      if (remote_root_node == nullptr) return;
 
       super_root_->upgradeToWriteLockOrRestart(versionNode, needRestart);
       if (needRestart) {
@@ -1555,8 +1552,7 @@ public:
     bool verbose = false;
     bool IO_enable = false;
   restart:
-    if (restartCount++)
-      yield(restartCount);
+    if (restartCount++) yield(restartCount);
 
     BTreeInner<Key> *parent = super_root_;
     bool needRestart = false;
@@ -1717,8 +1713,8 @@ public:
           cur_node->writeUnlock();
           inner->IOUnlock();
         } else {
-          IO_enable = true; // This means we do not do admission control and
-                            // pushdown anymore
+          IO_enable = true;  // This means we do not do admission control and
+                             // pushdown anymore
           inner->IOUnlock();
           if (refresh) {
             new_refresh_from_root(k);
@@ -1813,24 +1809,20 @@ public:
   }
 
   bool rangeValid(Key k, Key cur_min, Key cur_max) {
-    if (std::numeric_limits<Key>::min() == k && k == cur_min)
-      return true;
-    if (k <= cur_min || k > cur_max)
-      return false;
+    if (std::numeric_limits<Key>::min() == k && k == cur_min) return true;
+    if (k <= cur_min || k > cur_max) return false;
     return true;
   }
 
   bool lookup(Key k, Value &result) {
     int restartCount = 0;
   restart:
-    if (restartCount++)
-      yield(restartCount);
+    if (restartCount++) yield(restartCount);
     BTreeInner<Key> *parent = super_root_;
     bool needRestart = false;
     bool refresh = false;
     uint64_t versionParent = super_root_->readLockOrRestart(needRestart);
-    if (needRestart)
-      goto restart;
+    if (needRestart) goto restart;
 
     NodeBase *cur_node = cache.search_in_cache(root);
     if (cur_node == nullptr) {
@@ -1913,8 +1905,7 @@ public:
 
       // Get the version of next node
       versionNode = cur_node->readLockOrRestart(needRestart);
-      if (needRestart)
-        goto restart;
+      if (needRestart) goto restart;
     }
 
     // Access the leaf node
@@ -1957,14 +1948,12 @@ public:
     int restartCount = 0;
     int cur_num = 0;
   restart:
-    if (restartCount++)
-      yield(restartCount);
+    if (restartCount++) yield(restartCount);
     BTreeInner<Key> *parent = super_root_;
     bool needRestart = false;
     bool refresh = false;
     uint64_t versionParent = super_root_->readLockOrRestart(needRestart);
-    if (needRestart)
-      goto restart;
+    if (needRestart) goto restart;
 
     NodeBase *cur_node = cache.search_in_cache(root);
     if (cur_node == nullptr) {
@@ -2046,8 +2035,7 @@ public:
 
       // Get the version of next node
       versionNode = cur_node->readLockOrRestart(needRestart);
-      if (needRestart)
-        goto restart;
+      if (needRestart) goto restart;
     }
 
     // Access the leaf node
@@ -2086,15 +2074,13 @@ public:
   bool update(Key k, Value v) {
     int restartCount = 0;
   restart:
-    if (restartCount++)
-      yield(restartCount);
+    if (restartCount++) yield(restartCount);
 
     BTreeInner<Key> *parent = super_root_;
     bool needRestart = false;
     bool refresh = false;
     uint64_t versionParent = super_root_->readLockOrRestart(needRestart);
-    if (needRestart)
-      goto restart;
+    if (needRestart) goto restart;
 
     NodeBase *cur_node = cache.search_in_cache(root);
     if (cur_node == nullptr) {
@@ -2177,8 +2163,7 @@ public:
 
       // Get the version of next node
       versionNode = cur_node->readLockOrRestart(needRestart);
-      if (needRestart)
-        goto restart;
+      if (needRestart) goto restart;
     }
 
     // Access the leaf node
@@ -2289,15 +2274,13 @@ public:
   bool remove(Key k) {
     int restartCount = 0;
   restart:
-    if (restartCount++)
-      yield(restartCount);
+    if (restartCount++) yield(restartCount);
 
     BTreeInner<Key> *parent = super_root_;
     bool needRestart = false;
     bool refresh = false;
     uint64_t versionParent = super_root_->readLockOrRestart(needRestart);
-    if (needRestart)
-      goto restart;
+    if (needRestart) goto restart;
 
     NodeBase *cur_node = cache.search_in_cache(root);
     if (cur_node == nullptr) {
@@ -2382,8 +2365,7 @@ public:
 
       // Get the version of next node
       versionNode = cur_node->readLockOrRestart(needRestart);
-      if (needRestart)
-        goto restart;
+      if (needRestart) goto restart;
     }
 
     // Access the leaf node
@@ -2478,8 +2460,7 @@ public:
         // Check wether this page is in hash table
         auto flag = cache.hash_table_->check_existence(
             cur_page->remote_address, reinterpret_cast<void *>(cur_page));
-        if (!flag)
-          ++wrong_cooling_hash_state;
+        if (!flag) ++wrong_cooling_hash_state;
         auto ret_page =
             cache.page_table_->get_with_lock(cur_page->remote_address);
         if (ret_page != reinterpret_cast<void *>(cur_page) &&
@@ -2575,8 +2556,7 @@ public:
     for (int i = 0; i <= num; ++i) {
       auto next_node = get_global_address(inner->children[i]);
       bool validate = true;
-      if (inner->level % megaLevel == 0)
-        validate = false;
+      if (inner->level % megaLevel == 0) validate = false;
 
       bool ret = recursive_validate(next_node, cur_node, validate, node_num);
       if (ret == false) {
@@ -2611,4 +2591,4 @@ public:
   void clear_statistic() {}
 };
 
-} // namespace cachepush
+}  // namespace cachepush

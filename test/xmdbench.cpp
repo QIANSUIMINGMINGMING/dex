@@ -26,6 +26,7 @@
 #include "uniform.h"
 #include "uniform_generator.h"
 #include "zipf.h"
+#include "XMD/BatchForest.h"
 
 // TODO bindCore
 namespace sherman {
@@ -186,7 +187,7 @@ void generate_index() {
 
     case 3:  // XMD
     {
-      // TODO
+      tree = new XMD::BatchForest<Key, Value>(dsm);
       break;
     }
   }
