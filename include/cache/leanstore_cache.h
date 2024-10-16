@@ -3,6 +3,8 @@
 /* This cache management is specialized for B+-Tree */
 /* Here I try to implement the idea of LeanStore and seek opportunies of further
  * optimization*/
+#include <inttypes.h>
+
 #include <atomic>
 #include <list>
 #include <random>
@@ -17,7 +19,6 @@
 #include "btree_node.h"
 #include "latency_collector.h"
 #include "node_wr.h"
-#include <inttypes.h>
 
 namespace cachepush {
 // FIXME(BT): these two variable is better to be included in the cache
@@ -45,16 +46,16 @@ enum class RPC_type { LOOKUP, UPDATE, INSERT, DELETE };
 #define LATENCY_COLLECT 1
 
 class CacheManager {
-public:
+ public:
   /* Core Data Structure */
-  uint64_t capacity;      // Number of pages used in the cache of CPU node
-  std::atomic<int> state; // 0 means warm-up phase, also use the page from
-                          // allocator; 1 means dynamic phase
+  uint64_t capacity;       // Number of pages used in the cache of CPU node
+  std::atomic<int> state;  // 0 means warm-up phase, also use the page from
+                           // allocator; 1 means dynamic phase
 
   /* Below is cache statistic */
-  uint64_t inner_miss_ = 0;     // inner read miss
-  uint64_t leaf_miss_ = 0;      // leaf read miss
-  uint64_t full_page_miss_ = 0; // full read miss
+  uint64_t inner_miss_ = 0;      // inner read miss
+  uint64_t leaf_miss_ = 0;       // leaf read miss
+  uint64_t full_page_miss_ = 0;  // full read miss
   uint64_t rdma_write = 0;
 
   // Concurrent hash table
@@ -69,7 +70,7 @@ public:
 
   GlobalAddress *root_ptr_;
 
-  double rpc_rate_; // the ratio for pushdown
+  double rpc_rate_;  // the ratio for pushdown
   double admission_rate_;
 
   // static thread_local LatencyCollector decision;
@@ -133,7 +134,7 @@ public:
            reinterpret_cast<char *>(cache_node) + 8, pageSize - 8);
 
     auto return_page = reinterpret_cast<NodeBase *>(page);
-    return_page->pos_state = 4; // means this page can not be sampled
+    return_page->pos_state = 4;  // means this page can not be sampled
     return_page->parent_ptr = parent_ptr;
     GlobalAddress snapshot = global_node;
     // FIXME(BT): no need to setup bitmap?
@@ -169,12 +170,10 @@ public:
       //   break;
       auto page =
           reinterpret_cast<NodeBase *>(cache_allocator::random_select());
-      if (page->pos_state != 2)
-        continue;
+      if (page->pos_state != 2) continue;
       int idx_in_parent = -1;
       auto cur_page = recursive_iterate(page, idx_in_parent);
-      if (cur_page == nullptr)
-        continue;
+      if (cur_page == nullptr) continue;
       auto parent = reinterpret_cast<BTreeInner<Key> *>(cur_page->parent_ptr);
       if (parent && parent->level != 255) {
         assert(cur_page->pos_state == 2);
@@ -199,8 +198,7 @@ public:
         if (idx_in_parent == -1) {
           std::cout << "The parent's idx is wrong!!!" << std::endl;
           check_parent_child_info(parent, cur_page);
-          while (true)
-            ;
+          while (true);
         }
 
         assert(idx_in_parent != -1);
@@ -244,7 +242,7 @@ public:
   // HOT => COOLING
   void sample_multiple_pages(int count) {
     while (count) {
-      sample_page(); // Need to write back the dirty data??
+      sample_page();  // Need to write back the dirty data??
       --count;
     }
   }
@@ -290,7 +288,7 @@ public:
           }
           break;
         }
-      } else { // state == 0
+      } else {  // state == 0
         bool last_page_flag = false;
         page = cache_allocator::allocate(last_page_flag);
         // If this is the last page,
@@ -318,8 +316,7 @@ public:
     void *page = nullptr;
     while (true) {
       page = try_get_empty_page();
-      if (page != nullptr)
-        break;
+      if (page != nullptr) break;
     }
     return page;
   }
@@ -365,8 +362,7 @@ public:
 
   // To test whether the loaded node belongs to this computing node
   bool sync_or_not(BTreeInner<Key> *inner, uint64_t idx) {
-    if (inner->level == 255)
-      return true;
+    if (inner->level == 255) return true;
     Key min_limit = (idx == 0) ? inner->min_limit_ : inner->keys[idx - 1];
     Key max_limit =
         (idx == inner->count) ? inner->max_limit_ : inner->keys[idx];
@@ -407,8 +403,7 @@ public:
       // Add IO flag
       page_table_->insert_io_flag(head_page_bucket, node);
       head_page_bucket->lock_.release_lock();
-      if (!IO_enable)
-        return nullptr;
+      if (!IO_enable) return nullptr;
 
       restart = true;
       NodeBase *return_page = nullptr;
@@ -504,8 +499,7 @@ public:
                                  bool &refresh, Key k, Value &result,
                                  bool &success, RPC_type rpc_type) {
     static thread_local std::mt19937 *generator = nullptr;
-    if (!generator)
-      generator = new std::mt19937(clock() + pthread_self());
+    if (!generator) generator = new std::mt19937(clock() + pthread_self());
     static thread_local std::uniform_int_distribution<uint64_t> distribution(
         0, 9999);
     auto idx = distribution(*generator);
@@ -514,59 +508,61 @@ public:
       // Just read from remote and return to the application
       int ret = 1;
       switch (rpc_type) {
-      case RPC_type::LOOKUP: {
-        auto buffer_page = raw_remote_read(global_node);
-        auto cur_leaf = reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
-        if (!cur_leaf->rangeValid(k)) {
-          ret = -1;
-        } else {
-          success = cur_leaf->find(k, result);
+        case RPC_type::LOOKUP: {
+          auto buffer_page = raw_remote_read(global_node);
+          auto cur_leaf =
+              reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
+          if (!cur_leaf->rangeValid(k)) {
+            ret = -1;
+          } else {
+            success = cur_leaf->find(k, result);
+          }
+          break;
         }
-        break;
-      }
 
-      case RPC_type::UPDATE: {
-        auto buffer_page = raw_remote_read(global_node);
-        auto cur_leaf = reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
-        if (!cur_leaf->rangeValid(k)) {
-          ret = -1;
-        } else {
-          success = cur_leaf->update(k, result);
-          if (success)
+        case RPC_type::UPDATE: {
+          auto buffer_page = raw_remote_read(global_node);
+          auto cur_leaf =
+              reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
+          if (!cur_leaf->rangeValid(k)) {
+            ret = -1;
+          } else {
+            success = cur_leaf->update(k, result);
+            if (success) remote_write(global_node, buffer_page, true, true);
+          }
+          break;
+        }
+
+        case RPC_type::INSERT: {
+          auto buffer_page = raw_remote_read(global_node);
+          auto cur_leaf =
+              reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
+          if ((!cur_leaf->rangeValid(k)) ||
+              (cur_leaf->count == cur_leaf->maxEntries)) {
+            ret = -1;
+          } else {
+            success = cur_leaf->insert(k, result);
             remote_write(global_node, buffer_page, true, true);
+          }
+          break;
         }
-        break;
-      }
 
-      case RPC_type::INSERT: {
-        auto buffer_page = raw_remote_read(global_node);
-        auto cur_leaf = reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
-        if ((!cur_leaf->rangeValid(k)) ||
-            (cur_leaf->count == cur_leaf->maxEntries)) {
+        case RPC_type::DELETE: {
+          auto buffer_page = raw_remote_read(global_node);
+          auto cur_leaf =
+              reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
+          if (!cur_leaf->rangeValid(k)) {
+            ret = -1;
+          } else {
+            success = cur_leaf->remove(k);
+            if (success) remote_write(global_node, buffer_page, true, true);
+          }
+          break;
+        }
+
+        default:
           ret = -1;
-        } else {
-          success = cur_leaf->insert(k, result);
-          remote_write(global_node, buffer_page, true, true);
-        }
-        break;
-      }
-
-      case RPC_type::DELETE: {
-        auto buffer_page = raw_remote_read(global_node);
-        auto cur_leaf = reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
-        if (!cur_leaf->rangeValid(k)) {
-          ret = -1;
-        } else {
-          success = cur_leaf->remove(k);
-          if (success)
-            remote_write(global_node, buffer_page, true, true);
-        }
-        break;
-      }
-
-      default:
-        ret = -1;
-        break;
+          break;
       }
       bool flag = page_table_->remove_with_lock(
           global_node, reinterpret_cast<void *>(IO_FLAG));
@@ -602,8 +598,7 @@ public:
                                           std::pair<Key, Value> *&kv_buffer,
                                           int &scan_num, Key &max_key) {
     static thread_local std::mt19937 *generator = nullptr;
-    if (!generator)
-      generator = new std::mt19937(clock() + pthread_self());
+    if (!generator) generator = new std::mt19937(clock() + pthread_self());
     static thread_local std::uniform_int_distribution<uint64_t> distribution(
         0, 9999);
     auto idx = distribution(*generator);
@@ -637,7 +632,6 @@ public:
                            NodeBase *parent, unsigned child_idx, bool &refresh,
                            Key k, Value &result, bool &success,
                            RPC_type rpc_type) {
-
 #ifdef LATENCY_COLLECT
     int missing_num = parent->level;
     bool sample = false;
@@ -653,24 +647,24 @@ public:
       GlobalAddress leaf_addr;
       int ret = 0;
       switch (rpc_type) {
-      case RPC_type::LOOKUP:
-        ret = global_dsm_->rpc_lookup(global_node, k, result);
-        break;
+        case RPC_type::LOOKUP:
+          ret = global_dsm_->rpc_lookup(global_node, k, result);
+          break;
 
-      case RPC_type::UPDATE:
-        ret = global_dsm_->rpc_update(global_node, k, result, leaf_addr);
-        break;
+        case RPC_type::UPDATE:
+          ret = global_dsm_->rpc_update(global_node, k, result, leaf_addr);
+          break;
 
-      case RPC_type::INSERT:
-        ret = global_dsm_->rpc_insert(global_node, k, result, leaf_addr);
-        break;
+        case RPC_type::INSERT:
+          ret = global_dsm_->rpc_insert(global_node, k, result, leaf_addr);
+          break;
 
-      case RPC_type::DELETE:
-        ret = global_dsm_->rpc_remove(global_node, k, leaf_addr);
-        break;
+        case RPC_type::DELETE:
+          ret = global_dsm_->rpc_remove(global_node, k, leaf_addr);
+          break;
 
-      default:
-        break;
+        default:
+          break;
       }
 
       int ret_flag = 1;
@@ -713,8 +707,7 @@ public:
 #else
     // Suppose the rpc_rate_ is static
     static thread_local std::mt19937 *generator = nullptr;
-    if (!generator)
-      generator = new std::mt19937(clock() + pthread_self());
+    if (!generator) generator = new std::mt19937(clock() + pthread_self());
     static thread_local std::uniform_int_distribution<uint64_t> distribution(
         0, 9999);
     auto idx = distribution(*generator);
@@ -723,24 +716,24 @@ public:
       int ret = 0;
       GlobalAddress leaf_addr;
       switch (rpc_type) {
-      case RPC_type::LOOKUP:
-        ret = global_dsm_->rpc_lookup(global_node, k, result);
-        break;
+        case RPC_type::LOOKUP:
+          ret = global_dsm_->rpc_lookup(global_node, k, result);
+          break;
 
-      case RPC_type::UPDATE:
-        ret = global_dsm_->rpc_update(global_node, k, result, leaf_addr);
-        break;
+        case RPC_type::UPDATE:
+          ret = global_dsm_->rpc_update(global_node, k, result, leaf_addr);
+          break;
 
-      case RPC_type::INSERT:
-        ret = global_dsm_->rpc_insert(global_node, k, result, leaf_addr);
-        break;
+        case RPC_type::INSERT:
+          ret = global_dsm_->rpc_insert(global_node, k, result, leaf_addr);
+          break;
 
-      case RPC_type::DELETE:
-        ret = global_dsm_->rpc_remove(global_node, k, leaf_addr);
-        break;
+        case RPC_type::DELETE:
+          ret = global_dsm_->rpc_remove(global_node, k, leaf_addr);
+          break;
 
-      default:
-        break;
+        default:
+          break;
       }
 
       int ret_flag = 1;
@@ -826,8 +819,7 @@ public:
         // assert(check_parent_child_info(target_parent, target_node));
         if (!check_parent_child_info(target_parent, target_node)) {
           std::cout << "There is a BUGGGGGGGGGG!!!!!!" << std::endl;
-          while (true)
-            ;
+          while (true);
         }
 
         auto idx_in_parent = target_parent->findIdx(
@@ -938,8 +930,7 @@ public:
     NodeBase *buffer_page = nullptr;
     if (sync_read) {
       buffer_page = opt_remote_read(global_node);
-      if (buffer_page == nullptr)
-        return false;
+      if (buffer_page == nullptr) return false;
     } else {
       buffer_page = raw_remote_read(global_node);
     }
@@ -977,8 +968,7 @@ public:
 
     if (return_page->remote_address != node) {
       std::cout << "Remote node is incorrect when reading it" << std::endl;
-      while (true)
-        ;
+      while (true);
     }
 
     assert(return_page->pos_state == 0);
@@ -989,8 +979,7 @@ public:
   }
 
   void reset(bool flush_dirty) {
-    if (flush_dirty)
-      flush_all();
+    if (flush_dirty) flush_all();
     state.store(0);
     inner_miss_ = 0;
     leaf_miss_ = 0;
@@ -1058,41 +1047,41 @@ public:
     for (uint64_t i = 0; i < page_num * 2; ++i) {
       auto cur_page = reinterpret_cast<NodeBase *>(start + i * pageSize / 2);
       switch (cur_page->pos_state) {
-      case 0:
-        remote_state++;
-        break;
-      case 1:
-        cooling_state++;
-        if (cur_page->type == PageType::BTreeInner) {
-          cooling_inner++;
+        case 0:
+          remote_state++;
+          break;
+        case 1:
+          cooling_state++;
+          if (cur_page->type == PageType::BTreeInner) {
+            cooling_inner++;
+            ++i;
+          } else if (cur_page->type == PageType::BTreeLeaf) {
+            cooling_leaf++;
+            ++i;
+          } else {
+            cooling_mini++;
+            cooling_mini_records += cur_page->count;
+          }
+          break;
+        case 2:
+          hot_state++;
+          if (cur_page->type == PageType::BTreeInner) {
+            hot_inner++;
+            ++i;
+          } else if (cur_page->type == PageType::BTreeLeaf) {
+            hot_leaf++;
+            ++i;
+          } else {
+            hot_mini++;
+            hot_mini_records += cur_page->count;
+          }
+          break;
+        case 3:
+          local_work_page++;
           ++i;
-        } else if (cur_page->type == PageType::BTreeLeaf) {
-          cooling_leaf++;
-          ++i;
-        } else {
-          cooling_mini++;
-          cooling_mini_records += cur_page->count;
-        }
-        break;
-      case 2:
-        hot_state++;
-        if (cur_page->type == PageType::BTreeInner) {
-          hot_inner++;
-          ++i;
-        } else if (cur_page->type == PageType::BTreeLeaf) {
-          hot_leaf++;
-          ++i;
-        } else {
-          hot_mini++;
-          hot_mini_records += cur_page->count;
-        }
-        break;
-      case 3:
-        local_work_page++;
-        ++i;
 
-      default:
-        break;
+        default:
+          break;
       }
     }
     std::cout << "#hot inner = " << hot_inner << std::endl;
@@ -1131,4 +1120,4 @@ public:
   }
 };
 
-} // namespace cachepush
+}  // namespace cachepush
