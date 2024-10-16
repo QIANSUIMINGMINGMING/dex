@@ -17,24 +17,34 @@ class BatchForest : public tree_api<T, P> {
             btrees[i]->set_new_root_ptr(first_root);
         }
     }
-    dsm->barrier("set roots");
+    dsm->barrier("set roots", dsm->getComputeNum());
 
     for (int i = 0; i< dsm->getComputeNum();i++) {
         btrees[i]->get_new_root_ptr();
     }
   }
 
-  bool insert(T key, P value) {}
+  bool insert(T key, P value) {
 
-  bool lookup(T key, P &value) {}
+  }
 
-  bool update(T key, P value) {}
+  bool lookup(T key, P &value) {
 
-  bool remove(T key) {}
+  }
 
-  int range_scan(T key, uint32_t num, std::pair<T, P> *&result) {}
+  bool update(T key, P value) {
 
-  void clear_statistic() { }
+  }
+
+  bool remove(T key) {
+
+  }
+
+  int range_scan(T key, uint32_t num, std::pair<T, P> *&result) {
+
+  }
+
+  void clear_statistic() {} 
 
   void bulk_load(T *bulk_array, uint64_t bulk_load_num) {}
 
