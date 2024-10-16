@@ -8,18 +8,18 @@ class BatchForest : public tree_api<T, P> {
  public:
   BatchForest(DSM *dsm) {
     my_dsm = dsm;
-    for (int i = 0; i < dsm->getClusterSize();i++) {
+    for (int i = 0; i < dsm->getComputeNum();i++) {
         btrees[i] = new BatchBTree(dsm, i);
     }    
     if (dsm->getMyNodeID() == 0) {
-        for (int i = 0; i < dsm->getClusterSize(); i++) {
+        for (int i = 0; i < dsm->getComputeNum(); i++) {
             auto first_root = btrees[i]->allocate_node();
             btrees[i]->set_new_root_ptr(first_root);
         }
     }
     dsm->barrier("set roots");
 
-    for (int i = 0; i< dsm->getClusterSize();i++) {
+    for (int i = 0; i< dsm->getComputeNum();i++) {
         btrees[i]->get_new_root_ptr();
     }
   }
