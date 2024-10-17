@@ -58,7 +58,7 @@ class BatchForest : public tree_api<T, P> {
       if ((key % compute_num) == node_id) {
         my_tree->bulk_load_tree_->insert(key, value);
       }
-      // std::cout << "i: " << i << std::endl;
+      std::cout << "i: " << i << std::endl;
     }
     my_tree->bulk_load_tree_->traverse();
 
