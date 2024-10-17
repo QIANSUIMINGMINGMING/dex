@@ -1,11 +1,22 @@
 #include <cstdint>
 #include <iostream>
+
+#include "../DSM.h"
+#include "../GlobalAddress.h"
+#include "../cache/btree_node.h"
 using namespace std;
 
 namespace XMD {
-constexpr int keyNum = 6;  // Maximum number of keys per node
+using Key = uint64_t;
+using Value = uint64_t;
+constexpr int kPageSize = 1024;
 
+constexpr int kInternalCardinality =
+    (kPageSize - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(uint8_t) -
+     2 * sizeof(bool)) /
+    (sizeof(Key) + sizeof(GlobalAddress));
 
+constexpr int keyNum = kInternalCardinality;  // Maximum number of keys per node
 
 class BTreeNode {
  public:

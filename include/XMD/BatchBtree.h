@@ -8,15 +8,11 @@
 #include <iostream>
 
 #include "InMemoryBtree.h"
-#include "../DSM.h"
-#include "../GlobalAddress.h"
-#include "../cache/btree_node.h"
+
 
 namespace XMD {
 
-using Key = uint64_t;
-using Value = uint64_t;
-constexpr int kPageSize = 1024;
+
 
 enum class PageType : uint8_t { BTreeInner = 1, BTreeLeaf = 2 };
 static const uint64_t swizzle_tag = 1ULL << 63;
@@ -26,10 +22,10 @@ static const uint64_t megaLevel =
 // Level 0, 1, ..., MegaLevel -1 are grouped as a sub-tree
 
 // crc kv
-constexpr int kInternalCardinality =
-    (kPageSize - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(uint8_t) -
-     2 * sizeof(bool)) /
-    (sizeof(Key) + sizeof(GlobalAddress));
+// constexpr int kInternalCardinality =
+//     (kPageSize - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(uint8_t) -
+//      2 * sizeof(bool)) /
+//     (sizeof(Key) + sizeof(GlobalAddress));
 
 // constexpr int kLeafCardinality =
 //     (kPageSize - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(uint8_t) -
