@@ -4,10 +4,13 @@
 
 // #include <boost/unordered/concurrent_flat_map.hpp>
 // #include <boost/unordered/unordered_map.hpp>
+#include <atomic>
 #include <iostream>
 
+#include "InMemoryBtree.h"
 #include "../DSM.h"
 #include "../GlobalAddress.h"
+#include "../cache/btree_node.h"
 
 namespace XMD {
 
@@ -24,10 +27,17 @@ static const uint64_t megaLevel =
 
 // crc kv
 constexpr int kInternalCardinality =
-    (kPageSize - sizeof(uint32_t)) / (sizeof(Key) + sizeof(GlobalAddress));
+    (kPageSize - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(uint8_t) -
+     2 * sizeof(bool)) /
+    (sizeof(Key) + sizeof(GlobalAddress));
 
-constexpr int kLeafCardinality =
-    (kPageSize - sizeof(uint32_t)) / sizeof(Key) + sizeof(Value);
+// constexpr int kLeafCardinality =
+//     (kPageSize - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(uint8_t) -
+//      2 * sizeof(bool)) /
+//         sizeof(Key) +
+//     sizeof(Value);
+
+constexpr int kLeafCardinality = 3;
 
 class NodePage {
  public:
@@ -35,10 +45,18 @@ class NodePage {
   uint8_t front_version = 0;
   Value values[kLeafCardinality]{0};
   Key keys[kLeafCardinality]{0};
+
+  bool is_leaf = true;
+  // for bulk loading
   uint8_t rear_version = 0;
 
+  NodePage() {}
+
+  NodePage(bool is_a_leaf) { is_leaf = is_a_leaf; }
+
   void set_consistent() {
-    this->crc = CityHash32((char *)values, (&rear_version) - (&front_version));
+    this->crc =
+        CityHash32((char *)&front_version, (&rear_version) - (&front_version));
   }
 
   bool check_consistent() const {
@@ -49,6 +67,8 @@ class NodePage {
     return succ;
   }
 };
+
+// For bulkloading
 
 class RootPtr {
  public:
@@ -78,18 +98,22 @@ class BatchBTree {
     tree_id_ = tree_id;
     is_mine_ = dsm_->getMyNodeID() == tree_id ? true : false;
     root_ptr_ptr_ = get_root_ptr_ptr();
+    bulk_load_tree_ = new BTree(kInternalCardinality/2+1);
   }
 
-  bool search() {}
+  bool search() { return true; }
 
   void batch_insert() { assert(is_mine_); }
 
-  void bulk_load() { assert(dsm_->getMyNodeID() == 0); }
+  void bulk_load_insert_single(const Key &k, const Value &v) {}
 
   DSM *dsm_;
   NodePage *root_;
   GlobalAddress root_ptr_ptr_;
   GlobalAddress root_ptr_;
+
+  BTree * bulk_load_tree_;
+  int bulk_load_node_num = 0;
 
   uint64_t tree_id_;
   bool is_mine_;
@@ -124,7 +148,7 @@ class BatchBTree {
       retry = !root_ptr->check_consistent();
       std::cout << "Retry read root" << std::endl;
     }
-    root_ptr_ = root_ptr->rootptr; 
+    root_ptr_ = root_ptr->rootptr;
     std::cout << "Read from mem tree root pointer value " << root_ptr_
               << std::endl;
   }
