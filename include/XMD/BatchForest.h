@@ -58,9 +58,10 @@ class BatchForest : public tree_api<T, P> {
       if ((key % compute_num) == node_id) {
         my_tree->bulk_load_tree_->insert(key, value);
       }
+      std::cout << "i: " << i << std::endl;
     }
 
-    cout << "my_tree node num: " << my_tree->bulk_load_node_num << std::endl;
+    std::cout << "my_tree node num: " << my_tree->bulk_load_node_num << std::endl;
 
     // uint32_t compute_num = my_dsm->getComputeNum();
     // if (node_id >= compute_num) {
