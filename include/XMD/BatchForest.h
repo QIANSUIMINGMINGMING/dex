@@ -52,14 +52,15 @@ class BatchForest : public tree_api<T, P> {
       return;
     }
     XMD::BatchBTree * my_tree = btrees[node_id];
-    for (uint64_t i = 0; i < bulk_load_num; i++) {
+    for (uint64_t i = 0; i < 600; i++) {
       T key = bulk_array[i];
       P value = bulk_array[i] + 1;
       if ((key % compute_num) == node_id) {
         my_tree->bulk_load_tree_->insert(key, value);
       }
-      std::cout << "i: " << i << std::endl;
+      // std::cout << "i: " << i << std::endl;
     }
+    my_tree->bulk_load_tree_->traverse();
 
     std::cout << "my_tree node num: " << my_tree->bulk_load_node_num << std::endl;
 

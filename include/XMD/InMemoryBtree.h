@@ -48,6 +48,13 @@ class BTreeNode {
 
     if (isLeaf) {
       // Shift keys and values
+      for (int s = 0; s < numKeys , s++;) {
+        if (keys[s] == key) {
+          keys[s] = value;
+          return;
+        }
+      }
+
       while (i >= 0 && keys[i] > key) {
         keys[i + 1] = keys[i];
         children[i + 1] = children[i];
