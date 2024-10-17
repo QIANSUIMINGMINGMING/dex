@@ -883,7 +883,7 @@ int main(int argc, char *argv[]) {
     bulk_load();
 
     while(true) {
-      
+
     }
 
     if (auto_tune) {

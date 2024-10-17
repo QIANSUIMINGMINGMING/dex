@@ -5,6 +5,8 @@ using namespace std;
 namespace XMD {
 constexpr int keyNum = 6;  // Maximum number of keys per node
 
+
+
 class BTreeNode {
  public:
   BTreeNode* leftmost_ptr;
@@ -176,5 +178,7 @@ class BTree {
     }
   }
 };
+
+int BTreeNode::node_count = 0;
 
 }  // namespace XMD
