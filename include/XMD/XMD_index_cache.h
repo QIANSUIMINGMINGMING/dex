@@ -77,12 +77,11 @@ class CacheManager {
   //   static thread_local LatencyCollector decision(100);
 
   CacheManager(uint64_t cache_capacity, double cooling_ratio,
-               double admission_rate, bool is_mine,
+               double admission_rate,
                GlobalAddress *root_ptr = nullptr) {
     admission_rate_ = admission_rate;
     std::cout << "Admission Rate: " << admission_rate_ << std::endl;
 
-    is_mine_ = is_mine;
     root_ptr_ = root_ptr;
     capacity = cache_capacity;
     state = 0;

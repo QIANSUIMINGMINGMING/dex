@@ -64,13 +64,14 @@ class BatchForest : public tree_api<T, P> {
 
     std::cout << "my_tree node num: " << my_tree->bulk_load_node_num
               << std::endl;
+            // ga_for_bulk = my_dsm->alloc(XMD::kPageSize *
+            // my_tree->bulk_load_node_num);
 
-    ga_for_bulk = my_dsm->alloc(XMD::kPageSize * my_tree->bulk_load_node_num);
+        //     std::cout
+        // << "allocated ga" << ga_for_bulk << std::endl;
+    my_tree->bulk_loading();
 
-    std::cout << "allocated ga" << ga_for_bulk << std::endl;
 
-    assert(ga_for_bulk != GlobalAddress::Null());
-    my_tree->bulk_loading(ga_for_bulk);
 
     // test
     // for (int i = 0; i < 10; i++) {
@@ -89,7 +90,8 @@ class BatchForest : public tree_api<T, P> {
     //   bool retry = true;
     //   while (retry) {
     //     my_dsm->read_sync(remote_page_buffer, remote_addr, XMD::kPageSize);
-    //     remote_page_ptr = reinterpret_cast<XMD::NodePage *>(remote_page_buffer);
+    //     remote_page_ptr = reinterpret_cast<XMD::NodePage
+    //     *>(remote_page_buffer);
     //     // retry = false;
     //     retry = !(remote_page_ptr->check_consistent());
     //     std::cout << "Retry read page" << std::endl;
@@ -108,13 +110,13 @@ class BatchForest : public tree_api<T, P> {
       btrees[i]->single_thread_load_newest_root();
     }
 
-    //set root
+    // set root
 
     Value v;
 
     lookup(1, v);
     lookup(20000, v);
-    lookup(3000000,v);
+    lookup(3000000, v);
     // uint32_t compute_num = my_dsm->getComputeNum();
     // if (node_id >= compute_num) {
     //   return;
@@ -159,9 +161,6 @@ class BatchForest : public tree_api<T, P> {
   }
 
   XMD::BatchBTree *btrees[MAX_MACHINE];
-
-  GlobalAddress ga_for_bulk = GlobalAddress::Null();
-  // int cur_ga_pos = 0;
 
   DSM *my_dsm;
   uint64_t bulk_threads = 8;

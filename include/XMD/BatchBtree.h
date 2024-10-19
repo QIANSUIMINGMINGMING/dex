@@ -53,7 +53,7 @@ class BatchBTree {
   BatchBTree(DSM *dsm, uint64_t tree_id, uint64_t cache_mb = 1,
              double sample_rate = 0.1, double admission_rate = 0.1)
       : cache_(cache_mb * 1024 * 1024 / kPageSize, sample_rate, admission_rate,
-               dsm->getMyNodeID() == tree_id ? true : false, &root_ptr_) {
+               &root_ptr_) {
     std::cout << "start generating tree " << tree_id << std::endl;
     super_root_ = new NodePage(255, GlobalAddress::Null());
     super_root_->header.pos_state = 2;
@@ -233,13 +233,13 @@ class BatchBTree {
 
   CacheManager cache_;
 
-  void bulk_loading(const GlobalAddress &mem_base) {
+  void bulk_loading() {
     BTreeNode *bulk_tree_root = bulk_load_tree_->root;
     GlobalAddress root_addr = bulk_tree_root->to_remote(
-        dsm_, mem_base, bulk_load_tree_->height,
-        std::numeric_limits<Key>::min(), std::numeric_limits<Key>::max());
+        dsm_, bulk_load_tree_->height, std::numeric_limits<Key>::min(),
+        std::numeric_limits<Key>::max());
 
-    std::cout << "my_bulk_tree address: " << root_addr <<std::endl;
+    std::cout << "my_bulk_tree address: " << root_addr << std::endl;
 
     first_set_new_root_ptr(root_addr);
   }
@@ -319,7 +319,8 @@ class BatchBTree {
       }
 
       root_ptr_ = remote_root_ptr;
-      auto mem_root = reinterpret_cast<NodePage *>(get_memory_address(root_ptr_));
+      auto mem_root =
+          reinterpret_cast<NodePage *>(get_memory_address(root_ptr_));
       assert(mem_root != nullptr);
       mem_root->parent_ptr = super_root_;
       super_root_->values[0] = root_ptr_;
@@ -337,8 +338,9 @@ class BatchBTree {
     assert(cache_.search_in_cache(root_ptr_) == nullptr);
     auto remote_root = checked_remote_read(root_ptr_);
     assert(remote_root != nullptr);
-    std::cout << "tree id " << tree_id_ << " level " << (int)remote_root->header.level 
-    << "key num " <<(int)remote_root->header.count;
+    std::cout << "tree id " << tree_id_ << " level "
+              << (int)remote_root->header.level << "key num "
+              << (int)remote_root->header.count;
     assert(remote_root->header.level == bulk_load_tree_->height || !is_mine_);
     cache_.cache_insert(root_ptr_, remote_root, super_root_);
 
@@ -349,7 +351,7 @@ class BatchBTree {
     super_root_->header.set_bitmap(0);
     height_ = mem_root->header.level + 1;
     std::cout << "Fetched new height = " << height_ << std::endl;
-    //print_node
+    // print_node
     mem_root->header.pos_state = 2;
     mem_root->writeUnlock();
     return;
@@ -436,12 +438,12 @@ class BatchBTree {
       versionParent = versionNode;
       auto idx = inner->lowerBound(k);
       if (idx == LeftMostIdx) {
-        cur_node = new_get_mem_node(
-            inner->left_ptr, parent,
-            idx, versionParent, needRestart, refresh, true);
+        cur_node = new_get_mem_node(inner->left_ptr, parent, idx, versionParent,
+                                    needRestart, refresh, true);
       } else {
-        cur_node = new_get_mem_node(*reinterpret_cast<GlobalAddress *>(&inner->values[idx]), parent, idx,
-                                    versionParent, needRestart, refresh, true);
+        cur_node = new_get_mem_node(
+            *reinterpret_cast<GlobalAddress *>(&inner->values[idx]), parent,
+            idx, versionParent, needRestart, refresh, true);
       }
 
       if (needRestart) {
