@@ -6,7 +6,7 @@
 
 namespace XMD {
 
-DSM *global_dsm_ = nullptr;  // Distributed shared memory
+// DSM *global_dsm_ = nullptr;  // Distributed shared memory
 // // uint64_t read_counter = 0;
 // // uint64_t write_counter = 0;
 
@@ -15,13 +15,13 @@ DSM *global_dsm_ = nullptr;  // Distributed shared memory
 // /*----------------------------------*/
 
 NodePage *checked_remote_read(GlobalAddress global_node) {
-  auto page_buffer = global_dsm_->get_rbuf(0).get_page_buffer();
-  std::cout << "global dsm_ address" <<global_dsm_ <<std::endl;
+  auto page_buffer = cachepush::global_dsm_->get_rbuf(0).get_page_buffer();
+  std::cout << "global dsm_ address" << cachepush::global_dsm_ << std::endl;
   NodePage *mem_node;
   bool retry = true;
   int retry_time = 3;
   while (retry) {
-    global_dsm_->read_sync(page_buffer, global_node, kPageSize, nullptr);
+    cachepush::global_dsm_->read_sync(page_buffer, global_node, kPageSize, nullptr);
     mem_node = reinterpret_cast<NodePage *>(page_buffer);
     retry = !mem_node->check_consistent();
     retry_time --;
@@ -35,8 +35,8 @@ NodePage *checked_remote_read(GlobalAddress global_node) {
 }
 
 NodePage *raw_remote_read(GlobalAddress global_node) {
-  auto page_buffer = (global_dsm_->get_rbuf(0)).get_page_buffer();
-  global_dsm_->read_sync(page_buffer, global_node, kPageSize, nullptr);
+  auto page_buffer = (cachepush::global_dsm_->get_rbuf(0)).get_page_buffer();
+  cachepush::global_dsm_->read_sync(page_buffer, global_node, kPageSize, nullptr);
   auto mem_node = reinterpret_cast<NodePage *>(page_buffer);
   return mem_node;
 }
