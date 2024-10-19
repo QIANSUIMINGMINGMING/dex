@@ -48,7 +48,7 @@ class BatchForest : public tree_api<T, P> {
       return;
     }
     XMD::BatchBTree *my_tree = btrees[node_id];
-    for (uint64_t i = 0; i < 200; i++) {
+    for (uint64_t i = 0; i < bulk_load_num; i++) {
       T key = bulk_array[i];
       P value = bulk_array[i] + 1;
       if ((key % compute_num) == node_id) {
