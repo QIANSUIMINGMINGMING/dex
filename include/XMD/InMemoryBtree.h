@@ -107,7 +107,7 @@ class NodeHeader : public cachepush::OptLock {
 constexpr int kInternalCardinality =
     (kPageSize - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(NodeHeader) -
      sizeof(uint64_t) - sizeof(GlobalAddress) - sizeof(bool) - sizeof(uint8_t) - 
-     sizeof(uint64_t)) /
+     2*sizeof(uint64_t)) /
     (sizeof(Key) + sizeof(GlobalAddress));
 
 class NodePage {
