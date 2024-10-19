@@ -53,7 +53,7 @@ class BatchBTree {
   BatchBTree(DSM *dsm, uint64_t tree_id, uint64_t cache_mb = 1,
              double sample_rate = 0.1, double admission_rate = 0.1)
       : cache_(cache_mb * 1024 * 1024 / kPageSize, sample_rate, admission_rate,
-               dsm_->getMyNodeID() == tree_id ? true : false, &root_) {
+               dsm->getMyNodeID() == tree_id ? true : false, &root_) {
     std::cout << "start generating tree " << tree_id << std::endl;
     super_root_ = new NodePage(255, GlobalAddress::Null());
     super_root_->header.pos_state = 2;
