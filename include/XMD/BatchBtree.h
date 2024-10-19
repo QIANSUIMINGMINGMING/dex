@@ -53,7 +53,7 @@ class BatchBTree {
   BatchBTree(DSM *dsm, uint64_t tree_id, uint64_t cache_mb = 1,
              double sample_rate = 0.1, double admission_rate = 0.1)
       : cache_(cache_mb * 1024 * 1024 / kPageSize, sample_rate, admission_rate,
-               dsm->getMyNodeID() == tree_id ? true : false, &root_) {
+               dsm->getMyNodeID() == tree_id ? true : false, &root_ptr_) {
     std::cout << "start generating tree " << tree_id << std::endl;
     super_root_ = new NodePage(255, GlobalAddress::Null());
     super_root_->header.pos_state = 2;
@@ -74,7 +74,7 @@ class BatchBTree {
     uint64_t versionParent = super_root_->readLockOrRestart(needRestart);
     if (needRestart) goto restart;
 
-    NodePage *cur_node = cache_.search_in_cache(root_);
+    NodePage *cur_node = cache_.search_in_cache(root_ptr_);
     if (cur_node == nullptr) {
       // Load newest root
       load_newest_root(versionParent, needRestart);
@@ -219,7 +219,7 @@ class BatchBTree {
   void bulk_load_insert_single(const Key &k, const Value &v) {}
 
   DSM *dsm_;
-  GlobalAddress root_;  // can be swizzled
+  // GlobalAddress root_;  // can be swizzled
   NodePage *super_root_;
   GlobalAddress root_ptr_ptr_;
   GlobalAddress root_ptr_;
@@ -298,10 +298,10 @@ class BatchBTree {
 
   void load_newest_root(uint64_t versionNode, bool &needRestart) {
     auto remote_root_ptr = get_new_root_ptr();
-    auto cur_root_ptr = get_global_address(root_);
+    auto cur_root_ptr = get_global_address(root_ptr_);
 
     if ((remote_root_ptr.val != cur_root_ptr.val) ||
-        (cache_.search_in_cache(root_) == nullptr)) {
+        (cache_.search_in_cache(root_ptr_) == nullptr)) {
       auto remote_root = checked_remote_read(remote_root_ptr);
       if (remote_root == nullptr) return;
 
@@ -311,21 +311,21 @@ class BatchBTree {
       }
 
       needRestart = true;
-      assert(cur_root_ptr == get_global_address(root_));
+      assert(cur_root_ptr == get_global_address(root_ptr_));
       // Load the lock from remote to see whether it is locked
 
       cache_.cache_insert(remote_root_ptr, remote_root, super_root_);
       auto old_mem_root =
-          reinterpret_cast<NodePage *>(get_memory_address(root_));
+          reinterpret_cast<NodePage *>(get_memory_address(root_ptr_));
       if (old_mem_root != nullptr) {
         old_mem_root->parent_ptr = nullptr;
       }
 
-      root_ = remote_root_ptr;
-      auto mem_root = reinterpret_cast<NodePage *>(get_memory_address(root_));
+      root_ptr_ = remote_root_ptr;
+      auto mem_root = reinterpret_cast<NodePage *>(get_memory_address(root_ptr_));
       assert(mem_root != nullptr);
       mem_root->parent_ptr = super_root_;
-      super_root_->values[0] = root_;
+      super_root_->values[0] = root_ptr_;
       super_root_->header.set_bitmap(0);
       height_ = mem_root->header.level + 1;
       std::cout << "Fetched new height = " << height_ << std::endl;
