@@ -397,7 +397,7 @@ class BTreeNode {
 
     NodeHeader* header = &page_ptr->header;
     // set header
-    header->count = numKeys;
+    header->count = static_cast<uint8_t>(numKeys);
     header->max_limit_ = max_lim;
     header->min_limit_ = min_lim;
     // set value
@@ -423,7 +423,7 @@ class BTreeNode {
 
     NodeHeader* header = &page_ptr->header;
     // set header
-    header->count = numKeys;
+    header->count = static_cast<uint8_t>(numKeys);
     header->max_limit_ = max_lim;
     header->min_limit_ = min_lim;
 

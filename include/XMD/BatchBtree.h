@@ -339,8 +339,8 @@ class BatchBTree {
     auto remote_root = checked_remote_read(root_ptr_);
     assert(remote_root != nullptr);
     std::cout << "tree id " << tree_id_ << " level "
-              << (int)remote_root->header.level << "key num "
-              << (int)remote_root->header.count;
+              << (unsigned)remote_root->header.level << "key num "
+              << (unsigned)remote_root->header.count;
     assert(remote_root->header.level == bulk_load_tree_->height || !is_mine_);
     cache_.cache_insert(root_ptr_, remote_root, super_root_);
 
