@@ -495,7 +495,7 @@ class CacheManager {
       int ret = 1;
       switch (rpc_type) {
         case cachepush::RPC_type::LOOKUP: {
-          auto buffer_page = raw_remote_read(global_node);
+          auto buffer_page = checked_remote_read(global_node);
           auto cur_leaf =
               reinterpret_cast<NodePage *>(buffer_page);
           if (!cur_leaf->header.rangeValid(k)) {

@@ -261,11 +261,6 @@ class BatchBTree {
     root_ptr_ = new_root_ptr;
     dsm_->write_sync(root_ptr_buffer, root_ptr_ptr_, sizeof(RootPtr));
     std::cout << "Success: tree root pointer value " << root_ptr_ << std::endl;
-
-    // super_root_->values[0] = root_ptr_.val;
-    // if (get_memory_address(root_ptr_) != nullptr) {
-    //   super_root_->header.set_bitmap(0);
-    // }
   }
 
   void first_get_new_root_ptr() {
@@ -345,8 +340,9 @@ class BatchBTree {
     << "key num " <<(int)remote_root->header.count;
     assert(remote_root->header.level == bulk_load_tree_->height || !is_mine_);
     cache_.cache_insert(root_ptr_, remote_root, super_root_);
+
     auto mem_root = reinterpret_cast<NodePage *>(get_memory_address(root_ptr_));
-    assert(mem_root != nullptr);
+    assert(cache_.search_in_cache(root_ptr_) != nullptr);
     mem_root->parent_ptr = super_root_;
     super_root_->values[0] = root_ptr_;
     super_root_->header.set_bitmap(0);
