@@ -103,6 +103,10 @@ class BatchForest : public tree_api<T, P> {
     for (int i = 0; i < my_dsm->getComputeNum(); i++) {
       btrees[i]->first_get_new_root_ptr();
     }
+
+    lookup(1);
+    lookup(20000);
+    lookup(3000000);
     // uint32_t compute_num = my_dsm->getComputeNum();
     // if (node_id >= compute_num) {
     //   return;

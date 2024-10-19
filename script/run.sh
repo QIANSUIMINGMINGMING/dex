@@ -100,3 +100,5 @@ fi
 sudo ../build/xmdbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[1]} ${cache[3]} ${distribution[$dis]} ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
 
 sleep 2
+
+# 21 5 100 0 0 0 0 144 1 256 0 0.99 50 10 50 0 1 1 3 1 0.1 0 36
