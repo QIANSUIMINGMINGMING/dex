@@ -9,7 +9,7 @@ class BatchForest : public tree_api<T, P> {
     std::cout << "creating XMD" << std::endl;
     my_dsm = dsm;
     for (int i = 0; i < dsm->getComputeNum(); i++) {
-      btrees[i] = new XMD::BatchBTree(dsm, i, cache_mb/(dsm->getComputeNum()), sample, admmision);
+      btrees[i] = new XMD::BatchBTree(dsm, i, cache_mb, sample, admmision);
     }
     if (dsm->getMyNodeID() == 0) {
       for (int i = 0; i < dsm->getComputeNum(); i++) {
