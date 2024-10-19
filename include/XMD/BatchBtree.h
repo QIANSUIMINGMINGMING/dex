@@ -285,6 +285,7 @@ class BatchBTree {
 
   GlobalAddress get_new_root_ptr() {
     auto root_ptr_buffer = dsm_->get_rbuf(0).get_page_buffer();
+    std::cout << "dsm_ address" <<dsm_ <<std::endl;
     RootPtr *root_ptr = nullptr;
     bool retry = true;
     while (retry) {

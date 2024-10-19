@@ -28,7 +28,7 @@ class BatchForest : public tree_api<T, P> {
 
   bool lookup(T key, P &value) {
     int shard_id = key % my_dsm->getComputeNum();
-    // std::cout << "lookup" << key << std::endl;
+    std::cout << "lookup" << key << std::endl;
     XMD::BatchBTree *shard_tree = btrees[shard_id];
     return shard_tree->search(key, value);
   }

@@ -16,11 +16,12 @@ DSM *global_dsm_ = nullptr;  // Distributed shared memory
 
 NodePage *checked_remote_read(GlobalAddress global_node) {
   auto page_buffer = global_dsm_->get_rbuf(0).get_page_buffer();
+  std::cout << "global dsm_ address" <<global_dsm_ <<std::endl;
   NodePage *mem_node;
   bool retry = true;
   int retry_time = 3;
   while (retry) {
-    global_dsm_->read_sync(page_buffer, global_node, kPageSize);
+    global_dsm_->read_sync(page_buffer, global_node, kPageSize, nullptr);
     mem_node = reinterpret_cast<NodePage *>(page_buffer);
     retry = !mem_node->check_consistent();
     retry_time --;
