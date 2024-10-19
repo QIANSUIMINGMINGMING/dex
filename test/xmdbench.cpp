@@ -187,7 +187,7 @@ void generate_index() {
 
     case 3:  // XMD
     {
-      tree = new BatchForest<Key, Value>(dsm);
+      tree = new BatchForest<Key, Value>(dsm, cache_mb, rpc_rate, admission_rate);
       break;
     }
   }

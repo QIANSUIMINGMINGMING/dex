@@ -5,10 +5,10 @@
 template <class T, class P>
 class BatchForest : public tree_api<T, P> {
  public:
-  BatchForest(DSM *dsm) {
+  BatchForest(DSM *dsm, uint64_t cache_mb, double sample, double admmision) {
     my_dsm = dsm;
     for (int i = 0; i < dsm->getComputeNum();i++) {
-        btrees[i] = new XMD::BatchBTree(dsm, i);
+        btrees[i] = new XMD::BatchBTree(dsm, i, cache_mb, sample, admmision);
     }    
     if (dsm->getMyNodeID() == 0) {
         for (int i = 0; i < dsm->getComputeNum(); i++) {
