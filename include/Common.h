@@ -96,7 +96,7 @@ constexpr uint64_t GB = 1024ull * MB;
 constexpr uint16_t kCacheLineSize = 64;
 
 // for remote allocate
-constexpr uint64_t dsmSize = 64; // GB  [CONFIG]
+constexpr uint64_t dsmSize = 128; // GB  [CONFIG]
 constexpr uint64_t kChunkSize = 32 * MB;
 
 // RDMA buffer
