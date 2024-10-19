@@ -145,7 +145,7 @@ class BatchBTree {
         //   }
         // }
         else {
-          assert(false);
+          // assert(false);
           // Upper than subtree; then directly load from remote
           remote_flag = cache_.cold_to_hot(inner_child_ga,
                                            reinterpret_cast<void **>(&cur_node),
