@@ -406,7 +406,7 @@ inline GlobalAddress DSM::alloc(size_t size) {
     local_allocator.set_chunck(rpc_wait()->addr);
 
     if (++next_target_dir_id == memThreadCount) {
-      next_target_node = (next_target_node + 1) % conf.machineNR;
+      // next_target_node = conf.machineNR - 1;
       next_target_dir_id = 0;
     }
 
