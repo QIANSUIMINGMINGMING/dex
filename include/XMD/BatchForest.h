@@ -102,7 +102,10 @@ class BatchForest : public tree_api<T, P> {
 
     for (int i = 0; i < my_dsm->getComputeNum(); i++) {
       btrees[i]->first_get_new_root_ptr();
+      btrees[i]->single_thread_load_newest_root();
     }
+
+    //set root
 
     Value v;
 

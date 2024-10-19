@@ -216,8 +216,6 @@ class BatchBTree {
 
   void batch_insert() { assert(is_mine_); }
 
-  void bulk_load_insert_single(const Key &k, const Value &v) {}
-
   DSM *dsm_;
   // GlobalAddress root_;  // can be swizzled
   NodePage *super_root_;
@@ -335,6 +333,27 @@ class BatchBTree {
       super_root_->writeUnlock();
       return;
     }
+  }
+
+  void single_thread_load_newest_root() {
+    assert(cache_.search_in_cache(root_ptr_) == nullptr);
+    auto remote_root = checked_remote_read(root_ptr_);
+    assert(remote_root != nullptr);
+    std::cout << "tree id " << tree_id_ << " level " << remote_root->header.level 
+    << "key num " <<remote_root->header.count;
+    assert(remote_root->header.level == bulk_load_tree_->height);
+    cache_.cache_insert(root_ptr_, remote_root, super_root_);
+    auto mem_root = reinterpret_cast<NodePage *>(get_memory_address(root_ptr_));
+    assert(mem_root != nullptr);
+    mem_root->parent_ptr = super_root_;
+    super_root_->values[0] = root_ptr_;
+    super_root_->header.set_bitmap(0);
+    height_ = mem_root->header.level + 1;
+    std::cout << "Fetched new height = " << height_ << std::endl;
+    //print_node
+    mem_root->header.pos_state = 2;
+    mem_root->writeUnlock();
+    return;
   }
 
   NodePage *new_get_mem_node(GlobalAddress &global_addr, NodePage *parent,
