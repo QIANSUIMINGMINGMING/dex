@@ -16,7 +16,7 @@ namespace XMD {
 
 NodePage *checked_remote_read(GlobalAddress global_node) {
   auto page_buffer = cachepush::global_dsm_->get_rbuf(0).get_page_buffer();
-  std::cout << "global dsm_ address" << cachepush::global_dsm_ << std::endl;
+  // std::cout << "global dsm_ address" << cachepush::global_dsm_ << std::endl;
   NodePage *mem_node;
   bool retry = true;
   int retry_time = 3;

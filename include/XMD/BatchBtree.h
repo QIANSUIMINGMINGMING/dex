@@ -285,7 +285,7 @@ class BatchBTree {
 
   GlobalAddress get_new_root_ptr() {
     auto root_ptr_buffer = dsm_->get_rbuf(0).get_page_buffer();
-    std::cout << "dsm_ address" <<dsm_ <<std::endl;
+    // std::cout << "dsm_ address" <<dsm_ <<std::endl;
     RootPtr *root_ptr = nullptr;
     bool retry = true;
     while (retry) {
@@ -376,7 +376,67 @@ class BatchBTree {
     return target_node;
   }
 
-  void new_refresh_from_root(Key k) { return; }
+  void new_refresh_from_root(Key k) {
+    // refresh until we entered into the non-shared node (e.g., leaf)
+    // A solution: all new nodes can be treated as shared node!
+    int restartCount = 0;
+    bool verbose = false;
+  restart:
+    if (restartCount++) yield(restartCount);
+
+    bool needRestart = false;
+    bool refresh = false;
+    NodePage *cur_node = super_root_;
+    uint64_t versionNode = cur_node->readLockOrRestart(needRestart);
+    if (needRestart) {
+      goto restart;
+    }
+
+    load_newest_root(versionNode, needRestart);
+    if (needRestart) {
+      goto restart;
+    }
+
+    NodePage *parent = reinterpret_cast<NodePage *>(cur_node);
+    uint64_t versionParent = versionNode;
+    cur_node = cache_.search_in_cache(root_ptr_);
+    assert(cur_node != nullptr);
+
+    versionNode = cur_node->readLockOrRestart(needRestart);
+    if (needRestart) {
+      goto restart;
+    }
+
+    // && cur_node->isShared()
+    while (!cur_node->is_leaf) {
+      auto inner = reinterpret_cast<NodePage *>(cur_node);
+      // Compare local with remote node
+      parent_read_unlock(parent, versionParent, needRestart);
+      if (needRestart) goto restart;
+
+      parent = inner;
+      versionParent = versionNode;
+      auto idx = inner->lowerBound(k);
+      if (idx == LeftMostIdx) {
+        cur_node = new_get_mem_node(
+            inner->left_ptr, parent,
+            idx, versionParent, needRestart, refresh, true);
+      } else {
+        cur_node = new_get_mem_node(*reinterpret_cast<GlobalAddress *>(&inner->values[idx]), parent, idx,
+                                    versionParent, needRestart, refresh, true);
+      }
+
+      if (needRestart) {
+        goto restart;
+      }
+
+      assert(cur_node != nullptr);
+      versionNode = cur_node->readLockOrRestart(needRestart);
+      if (needRestart) {
+        goto restart;
+      }
+    }
+  }
   // allocators
   GlobalAddress allocate_node() {
     auto node_addr = dsm_->alloc(kPageSize);
@@ -419,6 +479,27 @@ class BatchBTree {
       return reinterpret_cast<void *>(node & swizzle_hide);
     }
     return nullptr;
+  }
+
+  void parent_read_unlock(NodePage *parent, uint64_t versionParent,
+                          bool &needRestart) {
+    if (parent == super_root_) {
+      // Super root
+      auto cur_root = get_global_address(root_ptr_);
+      parent->readUnlockOrRestart(versionParent, needRestart);
+      if (needRestart) {
+        return;
+      }
+    } else {
+      // Normal parent
+      // Local check
+      auto parent_remote_addr = parent->header.remote_address;
+      auto parent_version = parent->front_version;
+      parent->readUnlockOrRestart(versionParent, needRestart);
+      if (needRestart) {
+        return;
+      }
+    }
   }
 
   bool rangeValid(Key k, Key cur_min, Key cur_max) {
