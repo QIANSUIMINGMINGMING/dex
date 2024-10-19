@@ -81,6 +81,8 @@ class BatchBTree {
       goto restart;
     }
 
+    // printNodePage(*cur_node);
+
     uint64_t versionNode = cur_node->readLockOrRestart(needRestart);
     if (needRestart) {
       goto restart;
@@ -110,6 +112,10 @@ class BatchBTree {
 
         inner_child_ga.val = inner->values[idx];
       }
+
+
+
+
       if (needRestart) {
         if (refresh) {
           new_refresh_from_root(k);
@@ -150,6 +156,7 @@ class BatchBTree {
           remote_flag = cache_.cold_to_hot(inner_child_ga,
                                            reinterpret_cast<void **>(&cur_node),
                                            inner, idx, refresh);
+                                
         }
 
         // Admission succeed
@@ -177,7 +184,10 @@ class BatchBTree {
       // Get the version of next node
       versionNode = cur_node->readLockOrRestart(needRestart);
       if (needRestart) goto restart;
+
+      // printNodePage(*cur_node);
     }
+
 
     // Access the leaf node
     NodePage *leaf = cur_node;
@@ -193,6 +203,8 @@ class BatchBTree {
         (leaf->keys[pos] == k)) {
       success = true;
       result = leaf->values[pos];
+    } else {
+      result = std::numeric_limits<Value>::max();
     }
 
     auto backup_min = leaf->header.min_limit_;
@@ -352,8 +364,11 @@ class BatchBTree {
     height_ = mem_root->header.level + 1;
     std::cout << "Fetched new height = " << height_ << std::endl;
     // print_node
+
     mem_root->header.pos_state = 2;
     mem_root->writeUnlock();
+    printNodePage(*mem_root);
+
     return;
   }
 

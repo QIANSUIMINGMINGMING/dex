@@ -106,22 +106,22 @@ class NodeHeader : public cachepush::OptLock {
 
 constexpr int kInternalCardinality =
     (kPageSize - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(NodeHeader) -
-     sizeof(uint64_t) - sizeof(GlobalAddress) - sizeof(bool) - sizeof(uint8_t) - 
-     2*sizeof(uint64_t)) /
+     sizeof(uint64_t) - sizeof(GlobalAddress) - sizeof(bool) - sizeof(uint8_t) -
+     2 * sizeof(uint64_t)) /
     (sizeof(Key) + sizeof(GlobalAddress));
 
 class NodePage {
  public:
   uint32_t crc = 0;
-  uint8_t front_version = 0;
   NodeHeader header;
   NodePage* parent_ptr;  // The ptr to the parent;
+  uint8_t front_version = 0;
   GlobalAddress left_ptr = GlobalAddress::Null();
   Value values[kInternalCardinality]{0};
   Key keys[kInternalCardinality]{0};
+  uint8_t rear_version = 0;
   bool is_leaf;
   // for bulk loading
-  uint8_t rear_version = 0;
   uint64_t dummy;
 
   NodePage(uint8_t cur_level, GlobalAddress remote)
@@ -245,10 +245,60 @@ class NodePage {
 
 constexpr int keyNum = kInternalCardinality;  // Maximum number of keys per node
 
+void printNodePage(const NodePage& node) {
+  std::cout << "NodePage Debugger:" << std::endl;
+
+  // Basic fields
+  std::cout << "CRC: " << node.crc << std::endl;
+  std::cout << "Front Version: " << static_cast<int>(node.front_version)
+            << std::endl;
+
+  // NodeHeader fields
+  std::cout << "Node Header:" << std::endl;
+  std::cout << "\tRemote Address: " << node.header.remote_address << std::endl;
+  std::cout << "\tBitmap: " << node.header.bitmap << std::endl;
+  std::cout << "\tCount: " << static_cast<int>(node.header.count) << std::endl;
+  std::cout << "\tLevel: " << static_cast<int>(node.header.level) << std::endl;
+  std::cout << "\tPos State: " << static_cast<int>(node.header.pos_state)
+            << std::endl;
+  std::cout << "\tObsolete: " << std::boolalpha << node.header.obsolete
+            << std::endl;
+  std::cout << "\tMin Limit: " << node.header.min_limit_ << std::endl;
+  std::cout << "\tMax Limit: " << node.header.max_limit_ << std::endl;
+
+  // NodePage specific fields
+  std::cout << "Parent Pointer: " << node.parent_ptr << std::endl;
+  std::cout << "Left Pointer: " << node.left_ptr << std::endl;
+
+  // Values and keys
+  std::cout << "Values: [";
+  for (size_t i = 0; i < kInternalCardinality; ++i) {
+    std::cout << node.values[i];
+    if (i != kInternalCardinality - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << "]" << std::endl;
+
+  std::cout << "Keys: [";
+  for (size_t i = 0; i < kInternalCardinality; ++i) {
+    std::cout << node.keys[i];
+    if (i != kInternalCardinality - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << "]" << std::endl;
+
+  std::cout << "Is Leaf: " << std::boolalpha << node.is_leaf << std::endl;
+  std::cout << "Rear Version: " << static_cast<int>(node.rear_version)
+            << std::endl;
+  std::cout << "Dummy: " << node.dummy << std::endl;
+}
+
 class BTreeNode {
  public:
   BTreeNode* leftmost_ptr;
-  BTreeNode * next_leaf =nullptr;
+  BTreeNode* next_leaf = nullptr;
   GlobalAddress ga = GlobalAddress::Null();
   uint64_t keys[keyNum];  // Stores up to keyNum keys
   uint64_t
@@ -256,7 +306,7 @@ class BTreeNode {
   int numKeys;           // Number of valid keys in the node
   int degree;            // Minimum degree
   bool isLeaf;           // Is true when node is a leaf
-  
+
   int my_btree_node_id;
 
   static int node_count;
@@ -370,7 +420,6 @@ class BTreeNode {
     children[i + 1] = (uint64_t)z;
     keys[i + 1] = z->keys[0];
 
-
     // for (uint64_t op = 0; op < numKeys; op++) {
     //   std::cout << "1key i " << op << " " << keys[op] << std::endl;
     // }
@@ -386,8 +435,7 @@ class BTreeNode {
     }
   }
 
-  GlobalAddress send_to_remote_internal(DSM* dsm,
-                                        GlobalAddress* gas,
+  GlobalAddress send_to_remote_internal(DSM* dsm, GlobalAddress* gas,
                                         const GlobalAddress& left_ga, int level,
                                         uint64_t min_lim, uint64_t max_lim) {
     GlobalAddress my_address = dsm->alloc(kPageSize);
@@ -414,9 +462,8 @@ class BTreeNode {
     return my_address;
   }
 
-  GlobalAddress send_to_remote_leaf(DSM* dsm,
-                               int level,
-                                    uint64_t min_lim, uint64_t max_lim) {
+  GlobalAddress send_to_remote_leaf(DSM* dsm, int level, uint64_t min_lim,
+                                    uint64_t max_lim) {
     GlobalAddress my_address = dsm->alloc(kPageSize);
     auto remote_page_buffer = dsm->get_rbuf(0).get_page_buffer();
     NodePage* page_ptr = new (remote_page_buffer) NodePage(0, my_address);
@@ -439,8 +486,8 @@ class BTreeNode {
     //   int next_btree_leaf_node_id = next_leaf->my_btree_node_id;
     //   GlobalAddress next_address;
     //   next_address.nodeID = mem_base.nodeID;
-    //   next_address.offset = mem_base.offset + kPageSize * next_btree_leaf_node_id;
-    //   page_ptr->left_ptr = next_address;
+    //   next_address.offset = mem_base.offset + kPageSize *
+    //   next_btree_leaf_node_id; page_ptr->left_ptr = next_address;
     // }
     page_ptr->is_leaf = true;
     page_ptr->set_consistent();
@@ -450,14 +497,13 @@ class BTreeNode {
     return my_address;
   }
 
-  GlobalAddress to_remote(DSM* dsm, int level,
-                          uint64_t min_lim, uint64_t max_lim) {
+  GlobalAddress to_remote(DSM* dsm, int level, uint64_t min_lim,
+                          uint64_t max_lim) {
     if (!isLeaf) {
       GlobalAddress ga_buffer[keyNum];
       GlobalAddress left_ga = GlobalAddress::Null();
       if (leftmost_ptr != nullptr) {
-        GlobalAddress left_ga =
-            leftmost_ptr->to_remote(dsm, level - 1, min_lim, keys[0]);
+        left_ga = leftmost_ptr->to_remote(dsm, level - 1, min_lim, keys[0]);
         // leftmost_ptr->traverse(level + 1);
       }
       for (int i = 0; i < numKeys; i++) {
@@ -470,9 +516,10 @@ class BTreeNode {
               next_level_max_lim);  // Increment level for child nodes
         }
       }
-      return send_to_remote_internal(dsm, ga_buffer, left_ga, level, min_lim, max_lim);
+      return send_to_remote_internal(dsm, ga_buffer, left_ga, level, min_lim,
+                                     max_lim);
     } else {
-      assert (level == 0);
+      assert(level == 0);
       return send_to_remote_leaf(dsm, level, min_lim, max_lim);
     }
   }
@@ -506,7 +553,6 @@ class BTreeNode {
     }
   }  // Modified to accept a "level" parameter for depth traversal
   BTreeNode* search(uint64_t key);
-
 
  private:
   int maxKeys() { return keyNum; }  // Maximum number of keys (fixed size array)

@@ -60,7 +60,7 @@ class BatchForest : public tree_api<T, P> {
     }
     assert(node_id == my_tree->tree_id_);
     my_tree->bulk_load_node_num = XMD::BTreeNode::node_count;
-    my_tree->bulk_load_tree_->traverse();
+    // my_tree->bulk_load_tree_->traverse();
 
     std::cout << "my_tree node num: " << my_tree->bulk_load_node_num
               << std::endl;
@@ -112,17 +112,17 @@ class BatchForest : public tree_api<T, P> {
 
     // set root
 
-    Value v;
+    // Value v;
 
-    lookup(1, v);
+    // lookup(1, v);
 
-    std::cout << "value of 1" << v << std::endl;
-    lookup(20000, v);
-    std::cout << "value of 2" << v << std::endl;
-    lookup(3000000, v);
-    std::cout << "value of 3" << v << std::endl;
+    // std::cout << "value of 1" << v << std::endl;
+    // lookup(20000, v);
+    // std::cout << "value of 2" << v << std::endl;
+    // lookup(3000000, v);
+    // std::cout << "value of 3" << v << std::endl;
 
-    while (true) {}
+    // while (true) {}
     // uint32_t compute_num = my_dsm->getComputeNum();
     // if (node_id >= compute_num) {
     //   return;

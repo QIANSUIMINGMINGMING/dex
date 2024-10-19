@@ -25,8 +25,10 @@ NodePage *checked_remote_read(GlobalAddress global_node) {
     mem_node = reinterpret_cast<NodePage *>(page_buffer);
     retry = !mem_node->check_consistent();
     retry_time --;
-    if (retry_time = 0) {
+    if (retry_time == 0) {
+      printNodePage(*mem_node);
       std::cout << "retry too many time" << std::endl;
+      assert(false);
       return nullptr;
     }
   }
