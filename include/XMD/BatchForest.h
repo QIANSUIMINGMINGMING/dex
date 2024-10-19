@@ -6,46 +6,39 @@ template <class T, class P>
 class BatchForest : public tree_api<T, P> {
  public:
   BatchForest(DSM *dsm, uint64_t cache_mb, double sample, double admmision) {
+    std::cout << "creating XMD" << std::endl;
     my_dsm = dsm;
-    for (int i = 0; i < dsm->getComputeNum();i++) {
-        btrees[i] = new XMD::BatchBTree(dsm, i, cache_mb, sample, admmision);
-    }    
+    for (int i = 0; i < dsm->getComputeNum(); i++) {
+      btrees[i] = new XMD::BatchBTree(dsm, i, cache_mb, sample, admmision);
+    }
     if (dsm->getMyNodeID() == 0) {
-        for (int i = 0; i < dsm->getComputeNum(); i++) {
-            auto first_root = btrees[i]->allocate_node();
-            btrees[i]->first_set_new_root_ptr(first_root);
-        }
+      for (int i = 0; i < dsm->getComputeNum(); i++) {
+        auto first_root = btrees[i]->allocate_node();
+        btrees[i]->first_set_new_root_ptr(first_root);
+      }
     }
     dsm->barrier("set roots", dsm->getComputeNum());
 
-    for (int i = 0; i< dsm->getComputeNum();i++) {
-        btrees[i]->first_get_new_root_ptr();
+    for (int i = 0; i < dsm->getComputeNum(); i++) {
+      btrees[i]->first_get_new_root_ptr();
     }
   }
 
-  bool insert(T key, P value) {
-    return true;
-  }
+  bool insert(T key, P value) { return true; }
 
   bool lookup(T key, P &value) {
     int shard_id = key % my_dsm->getComputeNum();
-    XMD::BatchBTree * shard_tree = btrees[shard_id]; 
+    XMD::BatchBTree *shard_tree = btrees[shard_id];
     return shard_tree->search(key, value);
   }
 
-  bool update(T key, P value) {
-    return true;
-  }
+  bool update(T key, P value) { return true; }
 
-  bool remove(T key) {
-    return true;
-  }
+  bool remove(T key) { return true; }
 
-  int range_scan(T key, uint32_t num, std::pair<T, P> *&result) {
-    return 0;
-  }
+  int range_scan(T key, uint32_t num, std::pair<T, P> *&result) { return 0; }
 
-  void clear_statistic() {} 
+  void clear_statistic() {}
 
   void bulk_load(T *bulk_array, uint64_t bulk_load_num) {
     uint32_t node_id = my_dsm->getMyNodeID();
@@ -53,8 +46,8 @@ class BatchForest : public tree_api<T, P> {
     if (node_id >= compute_num) {
       return;
     }
-    XMD::BatchBTree * my_tree = btrees[node_id];
-    for (uint64_t i = 0; i <bulk_load_num; i++) {
+    XMD::BatchBTree *my_tree = btrees[node_id];
+    for (uint64_t i = 0; i < bulk_load_num; i++) {
       T key = bulk_array[i];
       P value = bulk_array[i] + 1;
       if ((key % compute_num) == node_id) {
@@ -67,26 +60,26 @@ class BatchForest : public tree_api<T, P> {
     my_tree->bulk_load_node_num = XMD::BTreeNode::node_count;
     // my_tree->bulk_load_tree_->traverse();
 
-
-    std::cout << "my_tree node num: " << my_tree->bulk_load_node_num << std::endl;
+    std::cout << "my_tree node num: " << my_tree->bulk_load_node_num
+              << std::endl;
 
     ga_for_bulk = my_dsm->alloc(XMD::kPageSize * my_tree->bulk_load_node_num);
 
     assert(ga_for_bulk != GlobalAddress::Null());
     my_tree->bulk_loading(ga_for_bulk);
 
-    //test
+    // test
     for (int i = 0; i < 10; i++) {
-      XMD::BTreeNode * test_node = XMD::BTreeNode::first_ten[i];
-      std::cout << "node id" << i <<std::endl;
-      for (int j =0;j < test_node->numKeys;j++) {
-        std::cout<< test_node->keys[j] << " "; 
+      XMD::BTreeNode *test_node = XMD::BTreeNode::first_ten[i];
+      std::cout << "node id" << i << std::endl;
+      for (int j = 0; j < test_node->numKeys; j++) {
+        std::cout << test_node->keys[j] << " ";
       }
       std::cout << std::endl;
 
       GlobalAddress remote_addr;
       remote_addr.nodeID = ga_for_bulk.nodeID;
-      remote_addr.offset = ga_for_bulk.offset + i*XMD::kPageSize;
+      remote_addr.offset = ga_for_bulk.offset + i * XMD::kPageSize;
       auto remote_page_buffer = my_dsm->get_rbuf(0).get_page_buffer();
       XMD::NodePage *remote_page_ptr;
       bool retry = true;
@@ -135,7 +128,7 @@ class BatchForest : public tree_api<T, P> {
 
     //   for (uint64_t i = 0; i < num; ++i) {
     //     T k = array[i];
-    //     P v = array[i] + 1; 
+    //     P v = array[i] + 1;
     //     if ((k % compute_num) == node_id)
     //     btrees[node_id]->bulk_load_insert_single(k, v);
     //   }
@@ -143,7 +136,8 @@ class BatchForest : public tree_api<T, P> {
 
     // for (uint64_t i = 0; i < bulk_threads; i++) {
     //   th[i] =
-    //       std::thread(bulk_thread, reinterpret_cast<void *>(all_partition + i));
+    //       std::thread(bulk_thread, reinterpret_cast<void *>(all_partition +
+    //       i));
     // }
 
     // for (uint64_t i = 0; i < bulk_threads; i++) {
@@ -153,7 +147,7 @@ class BatchForest : public tree_api<T, P> {
 
   XMD::BatchBTree *btrees[MAX_MACHINE];
 
-  GlobalAddress ga_for_bulk=GlobalAddress::Null();
+  GlobalAddress ga_for_bulk = GlobalAddress::Null();
   // int cur_ga_pos = 0;
 
   DSM *my_dsm;
