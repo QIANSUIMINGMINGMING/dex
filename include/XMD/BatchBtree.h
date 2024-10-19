@@ -331,6 +331,7 @@ class BatchBTree {
       height_ = mem_root->header.level + 1;
       std::cout << "Fetched new height = " << height_ << std::endl;
       mem_root->header.pos_state = 2;
+      mem_root->writeUnlock();
       super_root_->writeUnlock();
       return;
     }

@@ -130,7 +130,7 @@ class CacheManager {
     //        reinterpret_cast<char *>(cache_node) + 8, kPageSize - 8);
 
     auto return_page = reinterpret_cast<NodePage *>(page);
-    return_page->header.typeVersionLockObsolete.store(0b1000);
+    return_page->header.typeVersionLockObsolete.store(0b1100);
 
     return_page->header.pos_state = 4;  // means this page can not be sampled
     return_page->parent_ptr = parent_ptr;
@@ -818,7 +818,7 @@ class CacheManager {
     assert(reinterpret_cast<NodePage *>(page)->header.pos_state != 2);
     bool IO_success = remote_to_cache(page, node, sync_read);
     auto return_page = reinterpret_cast<NodePage *>(page);
-    return_page->header.typeVersionLockObsolete.store(0b1000);
+    return_page->header.typeVersionLockObsolete.store(0b1100);
     assert(parent->header.level != 255);
     if ((!IO_success) ||
         (!new_check_limit_match(parent, return_page, child_idx))) {
