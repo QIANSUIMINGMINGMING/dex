@@ -58,6 +58,7 @@ class BatchForest : public tree_api<T, P> {
 
       // my_tree->bulk_load_tree_->traverse();
     }
+    assert(node_id == my_tree->tree_id_);
     my_tree->bulk_load_node_num = XMD::BTreeNode::node_count;
     // my_tree->bulk_load_tree_->traverse();
 
@@ -66,37 +67,39 @@ class BatchForest : public tree_api<T, P> {
 
     ga_for_bulk = my_dsm->alloc(XMD::kPageSize * my_tree->bulk_load_node_num);
 
+    std::cout << "allocated ga" << ga_for_bulk << std::endl;
+
     assert(ga_for_bulk != GlobalAddress::Null());
     my_tree->bulk_loading(ga_for_bulk);
 
     // test
-    for (int i = 0; i < 10; i++) {
-      XMD::BTreeNode *test_node = XMD::BTreeNode::first_ten[i];
-      std::cout << "node id" << i << std::endl;
-      for (int j = 0; j < test_node->numKeys; j++) {
-        std::cout << test_node->keys[j] << " ";
-      }
-      std::cout << std::endl;
+    // for (int i = 0; i < 10; i++) {
+    //   XMD::BTreeNode *test_node = XMD::BTreeNode::first_ten[i];
+    //   std::cout << "node id" << i << std::endl;
+    //   for (int j = 0; j < test_node->numKeys; j++) {
+    //     std::cout << test_node->keys[j] << " ";
+    //   }
+    //   std::cout << std::endl;
 
-      GlobalAddress remote_addr;
-      remote_addr.nodeID = ga_for_bulk.nodeID;
-      remote_addr.offset = ga_for_bulk.offset + i * XMD::kPageSize;
-      auto remote_page_buffer = my_dsm->get_rbuf(0).get_page_buffer();
-      XMD::NodePage *remote_page_ptr;
-      bool retry = true;
-      while (retry) {
-        my_dsm->read_sync(remote_page_buffer, remote_addr, XMD::kPageSize);
-        remote_page_ptr = reinterpret_cast<XMD::NodePage *>(remote_page_buffer);
-        // retry = false;
-        retry = !(remote_page_ptr->check_consistent());
-        std::cout << "Retry read page" << std::endl;
-      }
-      std::cout << "remote results ";
-      for (int j = 0; j < test_node->numKeys; j++) {
-        std::cout << remote_page_ptr->keys[j] << " ";
-      }
-      std::cout << std::endl;
-    }
+    //   GlobalAddress remote_addr;
+    //   remote_addr.nodeID = ga_for_bulk.nodeID;
+    //   remote_addr.offset = ga_for_bulk.offset + i * XMD::kPageSize;
+    //   auto remote_page_buffer = my_dsm->get_rbuf(0).get_page_buffer();
+    //   XMD::NodePage *remote_page_ptr;
+    //   bool retry = true;
+    //   while (retry) {
+    //     my_dsm->read_sync(remote_page_buffer, remote_addr, XMD::kPageSize);
+    //     remote_page_ptr = reinterpret_cast<XMD::NodePage *>(remote_page_buffer);
+    //     // retry = false;
+    //     retry = !(remote_page_ptr->check_consistent());
+    //     std::cout << "Retry read page" << std::endl;
+    //   }
+    //   std::cout << "remote results ";
+    //   for (int j = 0; j < test_node->numKeys; j++) {
+    //     std::cout << remote_page_ptr->keys[j] << " ";
+    //   }
+    //   std::cout << std::endl;
+    // }
 
     my_dsm->barrier("set-roots2", my_dsm->getComputeNum());
 

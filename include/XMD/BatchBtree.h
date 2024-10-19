@@ -238,6 +238,8 @@ class BatchBTree {
         dsm_, mem_base, bulk_load_tree_->height,
         std::numeric_limits<Key>::min(), std::numeric_limits<Key>::max());
 
+    std::cout << "my_bulk_tree address: " << root_addr <<std::endl;
+
     first_set_new_root_ptr(root_addr);
   }
 
@@ -260,10 +262,10 @@ class BatchBTree {
     dsm_->write_sync(root_ptr_buffer, root_ptr_ptr_, sizeof(RootPtr));
     std::cout << "Success: tree root pointer value " << root_ptr_ << std::endl;
 
-    super_root_->values[0] = root_ptr_.val;
-    if (get_memory_address(root_ptr_) != nullptr) {
-      super_root_->header.set_bitmap(0);
-    }
+    // super_root_->values[0] = root_ptr_.val;
+    // if (get_memory_address(root_ptr_) != nullptr) {
+    //   super_root_->header.set_bitmap(0);
+    // }
   }
 
   void first_get_new_root_ptr() {
