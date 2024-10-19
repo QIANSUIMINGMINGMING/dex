@@ -17,7 +17,7 @@ class BatchForest : public tree_api<T, P> {
         btrees[i]->first_set_new_root_ptr(first_root);
       }
     }
-    dsm->barrier("set roots", dsm->getComputeNum());
+    dsm->barrier("set-roots1", dsm->getComputeNum());
 
     for (int i = 0; i < dsm->getComputeNum(); i++) {
       btrees[i]->first_get_new_root_ptr();
@@ -97,7 +97,7 @@ class BatchForest : public tree_api<T, P> {
       std::cout << std::endl;
     }
 
-    my_dsm->barrier("set roots", my_dsm->getComputeNum());
+    my_dsm->barrier("set-roots2", my_dsm->getComputeNum());
 
     for (int i = 0; i < my_dsm->getComputeNum(); i++) {
       btrees[i]->first_get_new_root_ptr();
