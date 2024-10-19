@@ -159,7 +159,7 @@ class CacheManager {
         verbose = true;
       }
 
-      if (counter >= 10000) {
+      if (counter >= 1000) {
         exit(0);
         break;
       }
