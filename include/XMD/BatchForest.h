@@ -121,6 +121,8 @@ class BatchForest : public tree_api<T, P> {
     std::cout << "value of 2" << v << std::endl;
     lookup(3000000, v);
     std::cout << "value of 3" << v << std::endl;
+
+    while (true) {}
     // uint32_t compute_num = my_dsm->getComputeNum();
     // if (node_id >= compute_num) {
     //   return;
