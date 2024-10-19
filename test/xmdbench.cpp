@@ -882,10 +882,6 @@ int main(int argc, char *argv[]) {
     generate_workload();
     bulk_load();
 
-    while(true) {
-
-    }
-
     if (auto_tune) {
       run_times = admission_rate_vec.size() * rpc_rate_vec.size();
     }
