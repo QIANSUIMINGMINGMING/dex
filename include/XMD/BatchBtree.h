@@ -6,20 +6,11 @@
 // #include <boost/unordered/unordered_map.hpp>
 #include <atomic>
 #include <iostream>
+#include <thread>
 
-#include "InMemoryBtree.h"
-
+#include "XMD_index_cache.h"
 
 namespace XMD {
-
-
-
-enum class PageType : uint8_t { BTreeInner = 1, BTreeLeaf = 2 };
-static const uint64_t swizzle_tag = 1ULL << 63;
-static const uint64_t swizzle_hide = (1ULL << 63) - 1;
-static const uint64_t megaLevel =
-    4;  // 4 level as a Bigger Node to do coarse-grained distribution
-// Level 0, 1, ..., MegaLevel -1 are grouped as a sub-tree
 
 // crc kv
 // constexpr int kInternalCardinality =
@@ -33,36 +24,7 @@ static const uint64_t megaLevel =
 //         sizeof(Key) +
 //     sizeof(Value);
 
-constexpr int kLeafCardinality = 3;
-
-class NodePage {
- public:
-  uint32_t crc = 0;
-  uint8_t front_version = 0;
-  Value values[kLeafCardinality]{0};
-  Key keys[kLeafCardinality]{0};
-
-  bool is_leaf = true;
-  // for bulk loading
-  uint8_t rear_version = 0;
-
-  NodePage() {}
-
-  NodePage(bool is_a_leaf) { is_leaf = is_a_leaf; }
-
-  void set_consistent() {
-    this->crc =
-        CityHash32((char *)&front_version, (&rear_version) - (&front_version));
-  }
-
-  bool check_consistent() const {
-    bool succ = true;
-    auto cal_crc =
-        CityHash32((char *)&front_version, (&rear_version) - (&front_version));
-    succ = cal_crc == this->crc;
-    return succ;
-  }
-};
+constexpr int kLeafCardinality = kInternalCardinality;
 
 // For bulkloading
 
@@ -88,31 +50,198 @@ class RootPtr {
 
 class BatchBTree {
  public:
-  BatchBTree(DSM *dsm, uint64_t tree_id) {
+  BatchBTree(DSM *dsm, uint64_t tree_id, uint64_t cache_mb = 1,
+             double sample_rate = 0.1, double admission_rate = 0.1)
+      : cache_(cache_mb * 1024 * 1024 / kPageSize, sample_rate, admission_rate,
+               dsm_->getMyNodeID() == tree_id ? true : false, &root_) {
     std::cout << "start generating tree " << tree_id << std::endl;
+    super_root_ = new NodePage(255, GlobalAddress::Null());
+    super_root_->header.pos_state = 2;
     dsm_ = dsm;
     tree_id_ = tree_id;
     is_mine_ = dsm_->getMyNodeID() == tree_id ? true : false;
     root_ptr_ptr_ = get_root_ptr_ptr();
-    bulk_load_tree_ = new BTree(kInternalCardinality/2+1);
+    bulk_load_tree_ = new BTree(keyNum / 2 + 1);
   }
 
-  bool search() { return true; }
+  bool search(Key k, Value &result) {
+    int restartCount = 0;
+  restart:
+    if (restartCount++) yield(restartCount);
+    NodePage *parent = super_root_;
+    bool needRestart = false;
+    bool refresh = false;
+    uint64_t versionParent = super_root_->readLockOrRestart(needRestart);
+    if (needRestart) goto restart;
+
+    NodePage *cur_node = cache_.search_in_cache(root_);
+    if (cur_node == nullptr) {
+      // Load newest root
+      load_newest_root(versionParent, needRestart);
+      goto restart;
+    }
+
+    uint64_t versionNode = cur_node->readLockOrRestart(needRestart);
+    if (needRestart) {
+      goto restart;
+    }
+
+    while (!cur_node->is_leaf) {
+      auto inner = cur_node;
+      parent->readUnlockOrRestart(versionParent, needRestart);
+      if (needRestart) {
+        goto restart;
+      }
+
+      parent = inner;
+      versionParent = versionNode;
+      // Got the next child to go
+      auto idx = inner->lowerBound(k);
+      assert(idx != -1);
+      GlobalAddress inner_child_ga;
+      if (idx == LeftMostIdx) {
+        cur_node = new_get_mem_node(inner->left_ptr, inner, idx, versionNode,
+                                    needRestart, refresh, false);
+        inner_child_ga = inner->left_ptr;
+      } else {
+        cur_node = new_get_mem_node(
+            *(reinterpret_cast<GlobalAddress *>(&inner->values[idx])), inner,
+            idx, versionNode, needRestart, refresh, false);
+
+        inner_child_ga.val = inner->values[idx];
+      }
+      if (needRestart) {
+        if (refresh) {
+          new_refresh_from_root(k);
+        }
+        goto restart;
+      }
+
+      // IO flag has been inserted into the page table
+      // But the operation is not finished
+      if (cur_node == nullptr) {
+        int remote_flag = 0;
+        if (inner->header.level == 1) {
+          // Admission control is needed
+          bool lookup_success = false;
+          remote_flag = cache_.cold_to_hot_with_admission(
+              inner_child_ga, reinterpret_cast<void **>(&cur_node), inner, idx,
+              refresh, k, result, lookup_success, cachepush::RPC_type::LOOKUP);
+          if (remote_flag == 1) {
+            inner->IOUnlock();
+            return lookup_success;
+          }
+        }
+        //  else if (inner->header.level <= megaLevel) {
+        //   // RPC is probably needed
+        //   bool lookup_success = false;
+        //   remote_flag = cache_.cold_to_hot_with_rpc(
+        //       inner->children[idx], reinterpret_cast<void **>(&cur_node),
+        //       inner, idx, refresh, k, result, lookup_success,
+        //       RPC_type::LOOKUP);
+        //   if (remote_flag == 1) {
+        //     inner->IOUnlock();
+        //     return lookup_success;
+        //   }
+        // }
+        else {
+          // Upper than subtree; then directly load from remote
+          remote_flag = cache_.cold_to_hot(inner_child_ga,
+                                           reinterpret_cast<void **>(&cur_node),
+                                           inner, idx, refresh);
+        }
+
+        // Admission succeed
+        if (remote_flag == 0) {
+          assert(cur_node != nullptr);
+          if (idx == LeftMostIdx) {
+            new_swizzling(inner->left_ptr, inner, idx, cur_node);
+          } else {
+            new_swizzling(
+                *(reinterpret_cast<GlobalAddress *>(&inner->values[idx])),
+                inner, idx, cur_node);
+          }
+          cur_node->header.bitmap = 2;
+          cur_node->writeUnlock();
+          inner->IOUnlock();
+        } else {
+          inner->IOUnlock();
+          if (refresh) {
+            new_refresh_from_root(k);
+          }
+          goto restart;
+        }
+      }
+
+      // Get the version of next node
+      versionNode = cur_node->readLockOrRestart(needRestart);
+      if (needRestart) goto restart;
+    }
+
+    // Access the leaf node
+    NodePage *leaf = cur_node;
+    if (!leaf->header.rangeValid(k)) {
+      new_refresh_from_root(k);
+      goto restart;
+    }
+
+    // assert(leaf->rangeValid(k) == true);
+    unsigned pos = leaf->lowerBound(k);
+    bool success = false;
+    if ((pos < leaf->header.count) && (pos != LeftMostIdx) &&
+        (leaf->keys[pos] == k)) {
+      success = true;
+      result = leaf->values[pos];
+    }
+
+    auto backup_min = leaf->header.min_limit_;
+    auto backup_max = leaf->header.max_limit_;
+
+    if (parent) {
+      parent->readUnlockOrRestart(versionParent, needRestart);
+      if (needRestart) {
+        goto restart;
+      }
+    }
+
+    cur_node->readUnlockOrRestart(versionNode, needRestart);
+    if (needRestart) {
+      goto restart;
+    }
+
+    assert(rangeValid(k, backup_min, backup_max));
+    return success;
+    return true;
+  }
 
   void batch_insert() { assert(is_mine_); }
 
   void bulk_load_insert_single(const Key &k, const Value &v) {}
 
   DSM *dsm_;
-  NodePage *root_;
+  GlobalAddress root_;  // can be swizzled
+  NodePage *super_root_;
   GlobalAddress root_ptr_ptr_;
   GlobalAddress root_ptr_;
 
-  BTree * bulk_load_tree_;
+  int height_ = 0;
+
+  BTree *bulk_load_tree_;
   int bulk_load_node_num = 0;
 
   uint64_t tree_id_;
   bool is_mine_;
+
+  CacheManager cache_;
+
+  void bulk_loading(const GlobalAddress &mem_base) {
+    BTreeNode *bulk_tree_root = bulk_load_tree_->root;
+    GlobalAddress root_addr = bulk_tree_root->to_remote(
+        dsm_, mem_base, bulk_load_tree_->height,
+        std::numeric_limits<Key>::min(), std::numeric_limits<Key>::max());
+
+    first_set_new_root_ptr(root_addr);
+  }
 
   GlobalAddress get_root_ptr_ptr() {
     GlobalAddress addr;
@@ -121,7 +250,7 @@ class BatchBTree {
     return addr;
   }
 
-  void set_new_root_ptr(GlobalAddress new_root_ptr) {
+  void first_set_new_root_ptr(GlobalAddress new_root_ptr) {
     assert(is_mine_ || dsm_->getMyNodeID() == 0);
     auto root_ptr_buffer = dsm_->get_rbuf(0).get_page_buffer();
 
@@ -132,9 +261,14 @@ class BatchBTree {
     root_ptr_ = new_root_ptr;
     dsm_->write_sync(root_ptr_buffer, root_ptr_ptr_, sizeof(RootPtr));
     std::cout << "Success: tree root pointer value " << root_ptr_ << std::endl;
+
+    super_root_->values[0] = root_ptr_.val;
+    if (get_memory_address(root_ptr_) != nullptr) {
+      super_root_->header.set_bitmap(0);
+    }
   }
 
-  void get_new_root_ptr() {
+  void first_get_new_root_ptr() {
     auto root_ptr_buffer = dsm_->get_rbuf(0).get_page_buffer();
     RootPtr *root_ptr = nullptr;
     bool retry = true;
@@ -149,6 +283,98 @@ class BatchBTree {
               << std::endl;
   }
 
+  GlobalAddress get_new_root_ptr() {
+    auto root_ptr_buffer = dsm_->get_rbuf(0).get_page_buffer();
+    RootPtr *root_ptr = nullptr;
+    bool retry = true;
+    while (retry) {
+      dsm_->read_sync(root_ptr_buffer, root_ptr_ptr_, sizeof(RootPtr));
+      root_ptr = reinterpret_cast<RootPtr *>(root_ptr_buffer);
+      retry = !root_ptr->check_consistent();
+    }
+    root_ptr_ = root_ptr->rootptr;
+    return root_ptr_;
+  }
+
+  void load_newest_root(uint64_t versionNode, bool &needRestart) {
+    auto remote_root_ptr = get_new_root_ptr();
+    auto cur_root_ptr = get_global_address(root_);
+
+    if ((remote_root_ptr.val != cur_root_ptr.val) ||
+        (cache_.search_in_cache(root_) == nullptr)) {
+      auto remote_root = checked_remote_read(remote_root_ptr);
+      if (remote_root == nullptr) return;
+
+      super_root_->upgradeToWriteLockOrRestart(versionNode, needRestart);
+      if (needRestart) {
+        return;
+      }
+
+      needRestart = true;
+      assert(cur_root_ptr == get_global_address(root_));
+      // Load the lock from remote to see whether it is locked
+
+      cache_.cache_insert(remote_root_ptr, remote_root, super_root_);
+      auto old_mem_root =
+          reinterpret_cast<NodePage *>(get_memory_address(root_));
+      if (old_mem_root != nullptr) {
+        old_mem_root->parent_ptr = nullptr;
+      }
+
+      root_ = remote_root_ptr;
+      auto mem_root = reinterpret_cast<NodePage *>(get_memory_address(root_));
+      assert(mem_root != nullptr);
+      mem_root->parent_ptr = super_root_;
+      super_root_->values[0] = root_;
+      super_root_->header.set_bitmap(0);
+      height_ = mem_root->header.level + 1;
+      std::cout << "Fetched new height = " << height_ << std::endl;
+      mem_root->header.pos_state = 2;
+      super_root_->writeUnlock();
+      return;
+    }
+  }
+
+  NodePage *new_get_mem_node(GlobalAddress &global_addr, NodePage *parent,
+                             unsigned child_idx, uint64_t versionNode,
+                             bool &restart, bool &refresh, bool IO_enable) {
+    GlobalAddress node = global_addr;
+    if (node.val & swizzle_tag) {
+      return reinterpret_cast<NodePage *>(node.val & swizzle_hide);
+    }
+
+    cache_.opportunistic_sample();
+    parent->upgradeToIOLockOrRestart(versionNode, restart);
+    if (restart) {
+      return nullptr;
+    }
+
+    GlobalAddress snapshot = global_addr;
+    auto page = get_memory_address(snapshot);
+    if (page) {
+      parent->IOUnlock();
+      return reinterpret_cast<NodePage *>(page);
+    }
+
+    auto target_node =
+        cache_.cache_get(node, parent, child_idx, restart, refresh, IO_enable);
+    if (target_node != nullptr) {
+      new_swizzling(global_addr, parent, child_idx, target_node);
+      target_node->header.pos_state = 2;
+      target_node->writeUnlock();
+    }
+
+    // If IO is not supported, and IO flag is successfully inserteed
+    if (!restart && target_node == nullptr) {
+      assert(IO_enable == false);
+      return target_node;
+    }
+
+    parent->IOUnlock();
+    return target_node;
+  }
+
+  void new_refresh_from_root(Key k) { return; }
   // allocators
   GlobalAddress allocate_node() {
     auto node_addr = dsm_->alloc(kPageSize);
@@ -160,126 +386,61 @@ class BatchBTree {
     return node_addr;
   }
 
-  //  public:
-  //   BForest(DSM *dsm, int CNs, uint16_t tree_id);
+  void yield(int count) {
+    if (count > 3)
+      sched_yield();
+    else
+      _mm_pause();
+  }
 
-  //   bool search(const Key &k, Value &v, CoroContext *cxt = nullptr,
-  //               int coro_id = 0);
+  int get_node_ID(GlobalAddress global_node) {
+    uint64_t node = global_node.val;
+    if (node & swizzle_tag) {
+      auto mem_node = reinterpret_cast<NodePage *>(node & swizzle_hide);
+      return mem_node->header.remote_address.nodeID;
+    }
+    return global_node.nodeID;
+  }
 
-  //   void batch_insert(KVTS *kvs, int full_number, int thread_num);
+  GlobalAddress get_global_address(GlobalAddress global_node) {
+    uint64_t node = global_node.val;
+    if (node & swizzle_tag) {
+      auto mem_node = reinterpret_cast<NodePage *>(node & swizzle_hide);
+      return mem_node->header.remote_address;
+    }
+    return global_node;
+  }
 
-  //  private:
-  //   DSM *dsm;
-  //   int tree_num;
-  //   uint16_t tree_id;
-  //   GlobalAddress root_ptr_ptr[MAX_COMP];
-  //   IndexCache *indexCaches[MAX_COMP];
-  //   int cache_sizes[MAX_COMP];
-  //   std::atomic<int> cur_cache_sizes[MAX_COMP];
-  //   GlobalAddress allocator_starts[MAX_MEMORY];
+  void *get_memory_address(GlobalAddress global_node) {
+    uint64_t node = global_node.val;
+    if (node & swizzle_tag) {
+      return reinterpret_cast<void *>(node & swizzle_hide);
+    }
+    return nullptr;
+  }
 
-  //   thread_local static uintptr_t stack_page_buffer[define::kMaxLevelOfTree];
-  //   thread_local static GlobalAddress
-  //       stack_page_addr_buffer[define::kMaxLevelOfTree];
+  bool rangeValid(Key k, Key cur_min, Key cur_max) {
+    if (std::numeric_limits<Key>::min() == k && k == cur_min) return true;
+    if (k < cur_min || k >= cur_max) return false;
+    return true;
+  }
 
-  //   // boost::unordered_map<uint64_t, std::atomic<int>> tree_meta;
-  //   boost::concurrent_flat_map<uint64_t, int> tree_meta;
-  //   // new level
-  //   GlobalAddress next_level_page_addr;
-  //   BInternalPage *next_level_page;
-
-  //   boost::concurrent_flat_map<uint64_t, std::vector<BInternalEntry>>
-  //       new_inserted_entries[define::kMaxLevelOfTree];
-  //   std::unordered_map<uint64_t, BHeader> new_inserted_headers;
-  //   std::thread batch_insert_threads[kMaxBatchInsertCoreNum];
+  void new_swizzling(GlobalAddress &global_addr, NodePage *parent,
+                     unsigned child_idx, NodePage *child) {
+    if (!check_parent_child_info(parent, child)) {
+      std::cout << "Gloobal addr = " << global_addr << std::endl;
+      auto new_child = raw_remote_read(child->header.remote_address);
+      assert(check_parent_child_info(parent, child));
+    }
+    child->parent_ptr = parent;
+    child->header.pos_state = 2;
+    global_addr.val = reinterpret_cast<uint64_t>(child) | swizzle_tag;
+    auto inner_parent = reinterpret_cast<NodePage *>(parent);
+    inner_parent->header.set_bitmap(child_idx);
+    assert(inner_parent->header.level != 255);
+    assert(check_parent_child_info(parent, child));
+  }
 };
 
-// enum class BatchInsertFlag {
-//   LEFT_SAME_PAGE,
-//   LEFT_DIFF_PAGE,
-//   RIGHT_SAME_PAGE,
-//   RIGHT_DIFF_PAGE
-// };
-
-// struct BInsertedEntry {
-//   BInternalEntry entry;
-//   GlobalAddress page_addr;
-// };
-
-// class BForest {
-//  public:
-//   BForest(DSM *dsm, int CNs, uint16_t tree_id);
-
-//   bool search(const Key &k, Value &v, CoroContext *cxt = nullptr,
-//               int coro_id = 0);
-
-//   void batch_insert(KVTS *kvs, int full_number, int thread_num);
-
-//  private:
-//   DSM *dsm;
-//   int tree_num;
-//   uint16_t tree_id;
-//   GlobalAddress root_ptr_ptr[MAX_COMP];
-//   IndexCache *indexCaches[MAX_COMP];
-//   int cache_sizes[MAX_COMP];
-//   std::atomic<int> cur_cache_sizes[MAX_COMP];
-//   GlobalAddress allocator_starts[MAX_MEMORY];
-
-//   thread_local static uintptr_t stack_page_buffer[define::kMaxLevelOfTree];
-//   thread_local static GlobalAddress
-//       stack_page_addr_buffer[define::kMaxLevelOfTree];
-
-//   // boost::unordered_map<uint64_t, std::atomic<int>> tree_meta;
-//   boost::concurrent_flat_map<uint64_t, int> tree_meta;
-//   // new level
-//   GlobalAddress next_level_page_addr;
-//   BInternalPage *next_level_page;
-
-//   boost::concurrent_flat_map<uint64_t, std::vector<BInternalEntry>>
-//       new_inserted_entries[define::kMaxLevelOfTree];
-//   std::unordered_map<uint64_t, BHeader> new_inserted_headers;
-//   std::thread batch_insert_threads[kMaxBatchInsertCoreNum];
-
-//  private:
-//   static void batch_insert_leaf(BForest *forest, KVTS *kvs, int start, int
-//   cnt,
-//                                 int full_number, int thread_id,
-//                                 CoroContext *cxt = nullptr, int coro_id = 0);
-//   void batch_insert_internal(int thread_num);
-
-//   GlobalAddress get_root_ptr_ptr(uint16_t id);
-//   GlobalAddress get_root_ptr(CoroContext *cxt, int coro_id, uint16_t id);
-
-//   void set_stack_buffer(int level, const Key &k, CoroContext *cxt, int
-//   coro_id); void search_stack_buffer(int level, const Key &k, GlobalAddress
-//   &result);
-
-//   void split_leaf(KVTS *kvs, int start, int split_num, int range,
-//                   BatchInsertFlag l_flag, BatchInsertFlag r_flag, int
-//                   thread_id, CoroContext *cxt = nullptr, int coro_id = 0);
-//   inline void go_in_leaf(BLeafPage *lp, int start, Key lowest, Key highest,
-//                          int &next);
-//   inline void go_in_kvts(KVTS *kvs, int start, int range, int &next);
-//   void calculate_meta(int split_num, BatchInsertFlag l_flag);
-
-//   inline void set_leaf(KVTS *kvs, const Key &k, const Value &v,
-//                        bool &need_split, BatchInsertFlag l_flag,
-//                        BatchInsertFlag r_flag, int pre_kv, int pro_kv,
-//                        CoroContext *cxt = nullptr, int coro_id = 0);
-
-//   void update_root(int level);
-
-//   bool page_search(GlobalAddress page_addr, const Key &k, BSearchResult
-//   &result,
-//                    CoroContext *cxt, int coro_id);
-
-//   void internal_page_search(BInternalPage *page, const Key &k,
-//                             BSearchResult &result);
-
-//   void leaf_page_search(BLeafPage *page, const Key &k, BSearchResult
-//   &result);
-
-//   bool check_ga(GlobalAddress ga);
-// };
 };  // namespace XMD
 // namespace forest

@@ -11,6 +11,8 @@
 #include <unordered_map>
 #include <utility>
 
+#include "../GlobalAddress.h"
+
 namespace cachepush {
 // #define MINI 1
 
@@ -389,7 +391,7 @@ template <class Key> struct BTreeInner : public BTreeInnerBase {
 
   bool isFull() { return count == (maxEntries - 1); }
 
-  bool check_consistent() { return front_version == back_version; }
+  bool check_consistent() { return front_version == back_version; } 
 
   unsigned lowerBound(Key k) const {
     unsigned lower = 0;
