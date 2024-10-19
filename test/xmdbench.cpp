@@ -857,6 +857,7 @@ int main(int argc, char *argv[]) {
   config.index_type = tree_index;
   dsm = DSM::getInstance(config);
   cachepush::global_dsm_ = dsm;
+  XMD::global_dsm_ = dsm;
   // #Worker-threads in this CNode
   node_id = dsm->getMyNodeID();
   if (node_id == (CNodeCount - 1)) {
