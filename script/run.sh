@@ -68,9 +68,9 @@ mem_threads=(1 4)
 cache=(0 64 128 256 512 1024)
 distribution=(0 1 2 3)
 zipf=(0.99)
-bulk=50
+bulk=200
 warmup=10
-runnum=50
+runnum=200
 nodenum=5
 
 # other
@@ -97,7 +97,7 @@ if [ -z "$dis" ] || [ -z "$op" ] || [ -z "$idx" ] || [ -z "$t" ]; then
 fi
 
 # Execute the command with provided parameters
-sudo ../build/xmdbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[1]} ${cache[3]} ${distribution[$dis]} ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
+sudo ../build/xmdbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[3]} ${distribution[$dis]} ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 36
 
 sleep 2
 
