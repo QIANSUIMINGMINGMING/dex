@@ -583,10 +583,10 @@ class CacheManager {
     if (!generator) generator = new std::mt19937(clock() + pthread_self());
     static thread_local std::uniform_int_distribution<uint64_t> distribution(
         0, 9999);
-    // auto idx = distribution(*generator);
-    // uint64_t admission_idx = 10000 * admission_rate_;
-    if (true) {
-        // if (true) { 
+    auto idx = distribution(*generator);
+    uint64_t admission_idx = 10000 * admission_rate_;
+    if (cachepush::cache_allocator::get_state() == 1 && idx >= admission_idx) {
+      // if (true) { 
       // Just read from remote and return to the application
       int ret = 1;
       switch (rpc_type) {
