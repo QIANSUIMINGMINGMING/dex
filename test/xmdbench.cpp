@@ -36,7 +36,8 @@ extern uint64_t cache_hit[MAX_APP_THREAD][8];
 
 }  // namespace sherman
 int kMaxThread = 32;
-std::thread th[MAX_APP_THREAD];
+// std::thread th[MAX_APP_THREAD];
+
 uint64_t latency[MAX_APP_THREAD][LATENCY_WINDOWS]{0};
 uint64_t latency_th_all[LATENCY_WINDOWS]{0};
 uint64_t tp[MAX_APP_THREAD][8];
@@ -575,7 +576,12 @@ void thread_run(int id) {
   uint32_t scan_num = 100;
   std::pair<Key, Value> *result = new std::pair<Key, Value>[scan_num];
 
+  int pre_counter = 0;
   while (counter < per_thread_warmup_num) {
+    // if (counter - pre_counter > 1000) {
+    //   std::cout << "warm counter: " << counter << std::endl;
+    //   pre_counter = counter;
+    // }
     uint64_t key = thread_warmup_array[counter];
     op_type cur_op = static_cast<op_type>(key >> 56);
     key = key & op_mask;
@@ -649,10 +655,15 @@ void thread_run(int id) {
 
   // Start the real execution of the workload
   counter = 0;
+  pre_counter = 0;
   success_counter = 0;
   auto start = std::chrono::high_resolution_clock::now();
   Timer thread_timer;
   while (counter < per_thread_op_num) {
+    // if (counter - pre_counter > 1000) {
+    //   std::cout << "work counter: " << counter << std::endl;
+    //   pre_counter = counter;
+    // }
     uint64_t key = thread_workload_array[counter];
     op_type cur_op = static_cast<op_type>(key >> 56);
     key = key & op_mask;
@@ -905,6 +916,7 @@ int main(int argc, char *argv[]) {
       tree->get_newest_root();
       // In warmup phase, we do not use RPC
       tree->set_rpc_ratio(0);
+
       if (auto_tune) {
         auto idx = cur_run / rpc_rate_vec.size();
         assert(idx >= 0 && idx < admission_rate_vec.size());
@@ -918,8 +930,12 @@ int main(int argc, char *argv[]) {
       reset_all_params();
       std::cout << node_id << " is ready for the benchmark" << std::endl;
 
+      // thread_run(0);
+      std::thread ths[MAX_APP_THREAD];
+
+      // thread_run(0);
       for (int i = 0; i < kThreadCount; i++) {
-        th[i] = std::thread(thread_run, i);
+        ths[i] = std::thread(thread_run, i);
       }
 
       // Warmup
@@ -1066,7 +1082,7 @@ int main(int argc, char *argv[]) {
       }
 
       for (int i = 0; i < kThreadCount; i++) {
-        th[i].join();
+        ths[i].join();
       }
 
       // for (int i = 0; i < kThreadCount; ++i) {

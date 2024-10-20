@@ -2,27 +2,30 @@
 
 #pragma once
 
-#include "epoch.h"
+#include <inttypes.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
-#include <inttypes.h>
 #include <iostream>
 #include <random>
 #include <vector>
+
+#include "epoch.h"
 
 /// Here we need to add a wrapper to invoke epoch managerment
 
 namespace cachepush {
 class cache_allocator {
-public:
+ public:
+  std::atomic<int> state;
   uint64_t base_address;
-  uint64_t alloc_unit_; // Byte
+  uint64_t alloc_unit_;  // Byte
   uint64_t page_num_;
-  std::atomic<uint64_t> head_idx_; // head index of cache pool
+  std::atomic<uint64_t> head_idx_;  // head index of cache pool
   std::uniform_int_distribution<uint32_t> dist_;
 
   static cache_allocator *instance_;
@@ -55,13 +58,19 @@ public:
   }
 
   static void initialize(uint64_t alloc_unit, uint64_t cache_size) {
-    if (instance_ != nullptr)
-      return;
+    if (instance_ != nullptr) return;
     // set_seed((uint32_t)time(NULL));
     // set_seed((uint32_t)0xc70f6907);
     instance_ = new cache_allocator(alloc_unit, cache_size);
+    instance_->state = 0;
     // instance_->epoch_manager_.Initialize();
   }
+
+  static void set_state() { instance_->state.store(1); }
+
+  static void reset_state() { instance_->state.store(0); }
+
+  static int get_state() { return instance_->state.load(); }
 
   static void reset() {
     if (instance_ == nullptr) {
@@ -78,15 +87,12 @@ public:
       std::cout << "The External Memory is NOT initialized now!" << std::endl;
       return nullptr;
     }
-    if (instance_->head_idx_ >= instance_->page_num_)
-      return nullptr;
+    if (instance_->head_idx_ >= instance_->page_num_) return nullptr;
     auto cur_idx = instance_->head_idx_.fetch_add(1);
-    if (cur_idx >= instance_->page_num_)
-      return nullptr;
+    if (cur_idx >= instance_->page_num_) return nullptr;
     auto ret = reinterpret_cast<void *>(instance_->base_address +
                                         cur_idx * instance_->alloc_unit_);
-    if (cur_idx == instance_->page_num_ - 1)
-      last_page_flag = true;
+    if (cur_idx == instance_->page_num_ - 1) last_page_flag = true;
     return ret;
   }
 
@@ -122,8 +128,7 @@ public:
   // Randomly select a page
   static void *random_select() {
     static thread_local std::mt19937 *generator = nullptr;
-    if (!generator)
-      generator = new std::mt19937(clock() + pthread_self());
+    if (!generator) generator = new std::mt19937(clock() + pthread_self());
     static thread_local std::uniform_int_distribution<uint32_t> distribution(
         0, instance_->page_num_ - 1);
 
@@ -177,4 +182,4 @@ cache_allocator *cache_allocator::instance_ = nullptr;
 // uint32_t cache_allocator::seed_ = 0;
 // std::default_random_engine cache_allocator::gen_ =
 // std::default_random_engine();
-} // namespace cachepush
+}  // namespace cachepush

@@ -166,6 +166,7 @@ void thread_run(int id) {
     uint64_t key = thread_warmup_array[counter];
     op_type cur_op = static_cast<op_type>(key >> 56);
     key = key & op_mask;
+    std::cout << "start" << counter <<std::endl; 
     switch (cur_op) {
     case op_type::Lookup: {
       Value v = key;

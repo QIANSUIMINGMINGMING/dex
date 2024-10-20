@@ -47,9 +47,9 @@ uint64_t three_state = 0;
 class CacheManager {
  public:
   /* Core Data Structure */
-  uint64_t capacity;       // Number of pages used in the cache of CPU node
-  std::atomic<int> state;  // 0 means warm-up phase, also use the page from
-                           // allocator; 1 means dynamic phase
+  uint64_t capacity;  // Number of pages used in the cache of CPU node
+  // std::atomic<int> state;  // 0 means warm-up phase, also use the page from
+  //  allocator; 1 means dynamic phase
 
   /* Below is cache statistic */
   uint64_t inner_miss_ = 0;      // inner read miss
@@ -77,14 +77,13 @@ class CacheManager {
   //   static thread_local LatencyCollector decision(100);
 
   CacheManager(uint64_t cache_capacity, double cooling_ratio,
-               double admission_rate,
-               GlobalAddress *root_ptr = nullptr) {
+               double admission_rate, GlobalAddress *root_ptr = nullptr) {
     admission_rate_ = admission_rate;
-    std::cout << "Admission Rate: " << admission_rate_ << std::endl;
+    std::cout << "Admission Rate: " << admission_rate << std::endl;
 
     root_ptr_ = root_ptr;
     capacity = cache_capacity;
-    state = 0;
+    // state = 0;
     cachepush::cache_allocator::initialize(kPageSize,
                                            cache_capacity * kPageSize);
 #ifdef PAGE_TABLE
@@ -241,6 +240,93 @@ class CacheManager {
     }
   }
 
+  // void sample_page() {
+  //   int counter = 0;
+  //   bool verbose = false;
+  //   while (true) {
+  //     ++counter;
+  //     if (counter >= 900) {
+  //       verbose = true;
+  //     }
+
+  //     if (counter >= 1000) {
+  //       exit(0);
+  //       break;
+  //     }
+  //     // if (counter > 64)
+  //     //   break;
+  //     auto page =
+  //         reinterpret_cast<NodeBase *>(cache_allocator::random_select());
+  //     if (page->pos_state != 2) continue;
+  //     int idx_in_parent = -1;
+  //     auto cur_page = recursive_iterate(page, idx_in_parent);
+  //     if (cur_page == nullptr) continue;
+  //     auto parent = reinterpret_cast<BTreeInner<Key>
+  //     *>(cur_page->parent_ptr); if (parent && parent->level != 255) {
+  //       assert(cur_page->pos_state == 2);
+  //       bool needRestart = false;
+  //       parent->writeLockOrRestart(needRestart);
+  //       if (needRestart) {
+  //         cur_page->writeUnlock();
+  //         continue;
+  //       }
+  //       // assert(cur_page->parent_ptr == parent);
+  //       if (cur_page->parent_ptr != parent) {
+  //         parent->writeUnlock();
+  //         cur_page->writeUnlock();
+  //         continue;
+  //       }
+
+  //       if (idx_in_parent == -1) {
+  //         idx_in_parent =
+  //         parent->findIdx(reinterpret_cast<uint64_t>(cur_page) |
+  //                                         swizzle_tag);
+  //       }
+
+  //       if (idx_in_parent == -1) {
+  //         std::cout << "The parent's idx is wrong!!!" << std::endl;
+  //         check_parent_child_info(parent, cur_page);
+  //         while (true);
+  //       }
+
+  //       assert(idx_in_parent != -1);
+  //       assert(check_parent_child_info(parent, cur_page));
+
+  //       // Unswizzles
+  //       parent->children[idx_in_parent].val = cur_page->remote_address.val;
+  //       parent->unset_bitmap(idx_in_parent);
+  //       cur_page->parent_ptr = nullptr;
+  //       NodeBase *evict_page = nullptr;
+  //       if (cur_page->dirty) {
+  //         remote_write(cur_page->remote_address, cur_page, true);
+  //       }
+  //       hash_table_->insert(cur_page->remote_address.val,
+  //                           reinterpret_cast<void *>(cur_page),
+  //                           reinterpret_cast<void **>(&evict_page));
+  //       if (evict_page != nullptr) {
+  //         insert_local_set(reinterpret_cast<uint64_t>(evict_page));
+  //       }
+  //       parent->writeUnlock();
+  //       return;
+  //       // cache_allocator::BumpCurrentEpoch();
+  //     } else if (parent == nullptr) {
+  //       assert(cur_page->parent_ptr == nullptr);
+  //       if (cur_page->dirty) {
+  //         remote_write(cur_page->remote_address, cur_page, true);
+  //       }
+  //       NodeBase *evict_page = nullptr;
+  //       hash_table_->insert(cur_page->remote_address.val,
+  //                           reinterpret_cast<void *>(cur_page),
+  //                           reinterpret_cast<void **>(&evict_page));
+  //       if (evict_page != nullptr) {
+  //         insert_local_set(reinterpret_cast<uint64_t>(evict_page));
+  //       }
+  //       return;
+  //     }
+  //     cur_page->writeUnlock();
+  //   }
+  // }
+
   // HOT => COOLING
   void sample_multiple_pages(int count) {
     while (count) {
@@ -272,9 +358,10 @@ class CacheManager {
   void *try_get_empty_page() {
     void *page = nullptr;
     while (true) {
-      if (state == 1) {
+      if (cachepush::cache_allocator::get_state() >= 1) {
         if (!local_page_set.empty()) {
           page = get_local_page_set();
+          assert(reinterpret_cast<NodePage *>(page)->header.pos_state != 2);
           break;
         } else {
           // Evict from the cooling table
@@ -287,17 +374,25 @@ class CacheManager {
           if (page == nullptr && (!local_page_set.empty())) {
             page = get_local_page_set();
             assert(page != nullptr);
+            assert(reinterpret_cast<NodePage *>(page)->header.pos_state != 2);
           }
           break;
         }
       } else {  // state == 0
         bool last_page_flag = false;
         page = cachepush::cache_allocator::allocate(last_page_flag);
+        // auto page_n = reinterpret_cast<NodePage *>(page);
+        // assert(reinterpret_cast<NodePage *>(page)->header.pos_state != 2);
+
+        // if (reinterpret_cast<NodePage *>(page)->header.pos_state == 2) {
+        //   printNodePage(*page_n);
+        // }
         // If this is the last page,
         // we need to increment the state of the buffer pool
         if (last_page_flag) {
           std::cout << "entering dynamic phase" << std::endl;
-          state.store(1);
+          assert(reinterpret_cast<NodePage *>(page)->header.pos_state != 2);
+          cachepush::cache_allocator::set_state();
         }
 
         if (page != nullptr) {
@@ -310,7 +405,6 @@ class CacheManager {
     if (page != nullptr) {
       assert(reinterpret_cast<NodePage *>(page)->isLocked());
     }
-
     return page;
   }
 
@@ -356,7 +450,8 @@ class CacheManager {
   }
 
   void opportunistic_sample() {
-    if (state == 1 && local_page_set.empty()) {
+    if (cachepush::cache_allocator::get_state() == 1 &&
+        local_page_set.empty()) {
       // Start sampling: hot to cooling
       sample_multiple_pages(num_pages_to_sample);
     }
@@ -434,6 +529,7 @@ class CacheManager {
     // Using range to check
     if (!new_check_limit_match(parent, target_node, child_idx)) {
       // target node
+      assert(false);
       {
         // XMD
         //  Check whether it is outdated
@@ -487,16 +583,16 @@ class CacheManager {
     if (!generator) generator = new std::mt19937(clock() + pthread_self());
     static thread_local std::uniform_int_distribution<uint64_t> distribution(
         0, 9999);
-    auto idx = distribution(*generator);
-    uint64_t admission_idx = 10000 * admission_rate_;
-    if (state == 1 && idx >= admission_idx) {
+    // auto idx = distribution(*generator);
+    // uint64_t admission_idx = 10000 * admission_rate_;
+    if (true) {
+        // if (true) { 
       // Just read from remote and return to the application
       int ret = 1;
       switch (rpc_type) {
         case cachepush::RPC_type::LOOKUP: {
           auto buffer_page = checked_remote_read(global_node);
-          auto cur_leaf =
-              reinterpret_cast<NodePage *>(buffer_page);
+          auto cur_leaf = reinterpret_cast<NodePage *>(buffer_page);
           if (!cur_leaf->header.rangeValid(k)) {
             ret = -1;
           } else {
@@ -505,46 +601,48 @@ class CacheManager {
           break;
         }
 
-        // not use for now
-        // case RPC_type::UPDATE: {
-        //   auto buffer_page = raw_remote_read(global_node);
-        //   auto cur_leaf =
-        //       reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
-        //   if (!cur_leaf->rangeValid(k)) {
-        //     ret = -1;
-        //   } else {
-        //     success = cur_leaf->update(k, result);
-        //     if (success) remote_write(global_node, buffer_page, true, true);
-        //   }
-        //   break;
-        // }
+          // not use for now
+          // case RPC_type::UPDATE: {
+          //   auto buffer_page = raw_remote_read(global_node);
+          //   auto cur_leaf =
+          //       reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
+          //   if (!cur_leaf->rangeValid(k)) {
+          //     ret = -1;
+          //   } else {
+          //     success = cur_leaf->update(k, result);
+          //     if (success) remote_write(global_node, buffer_page, true,
+          //     true);
+          //   }
+          //   break;
+          // }
 
-        // case RPC_type::INSERT: {
-        //   auto buffer_page = raw_remote_read(global_node);
-        //   auto cur_leaf =
-        //       reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
-        //   if ((!cur_leaf->rangeValid(k)) ||
-        //       (cur_leaf->count == cur_leaf->maxEntries)) {
-        //     ret = -1;
-        //   } else {
-        //     success = cur_leaf->insert(k, result);
-        //     remote_write(global_node, buffer_page, true, true);
-        //   }
-        //   break;
-        // }
+          // case RPC_type::INSERT: {
+          //   auto buffer_page = raw_remote_read(global_node);
+          //   auto cur_leaf =
+          //       reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
+          //   if ((!cur_leaf->rangeValid(k)) ||
+          //       (cur_leaf->count == cur_leaf->maxEntries)) {
+          //     ret = -1;
+          //   } else {
+          //     success = cur_leaf->insert(k, result);
+          //     remote_write(global_node, buffer_page, true, true);
+          //   }
+          //   break;
+          // }
 
-        // case RPC_type::DELETE: {
-        //   auto buffer_page = raw_remote_read(global_node);
-        //   auto cur_leaf =
-        //       reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
-        //   if (!cur_leaf->rangeValid(k)) {
-        //     ret = -1;
-        //   } else {
-        //     success = cur_leaf->remove(k);
-        //     if (success) remote_write(global_node, buffer_page, true, true);
-        //   }
-        //   break;
-        // }
+          // case RPC_type::DELETE: {
+          //   auto buffer_page = raw_remote_read(global_node);
+          //   auto cur_leaf =
+          //       reinterpret_cast<BTreeLeaf<Key, Value> *>(buffer_page);
+          //   if (!cur_leaf->rangeValid(k)) {
+          //     ret = -1;
+          //   } else {
+          //     success = cur_leaf->remove(k);
+          //     if (success) remote_write(global_node, buffer_page, true,
+          //     true);
+          //   }
+          //   break;
+          // }
 
         default:
           ret = -1;
@@ -680,8 +778,9 @@ class CacheManager {
           unswizzling(&target_parent->left_ptr, target_parent, idx_in_parent,
                       target_node);
         } else {
-          unswizzling(reinterpret_cast<GlobalAddress *>(&target_parent->values[idx_in_parent]), target_parent,
-                      idx_in_parent, target_node);
+          unswizzling(reinterpret_cast<GlobalAddress *>(
+                          &target_parent->values[idx_in_parent]),
+                      target_parent, idx_in_parent, target_node);
         }
         target_parent->writeUnlock();
       }
@@ -814,7 +913,8 @@ class CacheManager {
     if (page == nullptr) {
       return -1;
     }
-    assert(reinterpret_cast<NodePage *>(page)->header.pos_state != 2);
+    // assert(reinterpret_cast<NodePage *>(page)->header.pos_state != 2);
+
     bool IO_success = remote_to_cache(page, node, sync_read);
     auto return_page = reinterpret_cast<NodePage *>(page);
     return_page->header.typeVersionLockObsolete.store(0b1100);
@@ -839,7 +939,7 @@ class CacheManager {
   }
 
   void reset(bool flush_dirty) {
-    state.store(0);
+    cachepush::cache_allocator::reset();
     inner_miss_ = 0;
     leaf_miss_ = 0;
     full_page_miss_ = 0;

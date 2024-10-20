@@ -166,11 +166,13 @@ class BatchForest : public tree_api<T, P> {
     // }
   }
 
+  // void reset_buffer_pool(bool flush_dirty) { 
+  //   cache.reset(flush_dirty); 
+  // }
+
   XMD::BatchBTree *btrees[MAX_MACHINE];
 
-  DSM *my_dsm;
-  uint64_t bulk_threads = 8;
-  std::thread th[8];
+  DSM *my_dsm; 
   // Do most initialization work here
   tree_api<T, P> *create_tree() { return nullptr; }
 };

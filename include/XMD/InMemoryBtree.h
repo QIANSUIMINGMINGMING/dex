@@ -135,24 +135,45 @@ class NodePage {
 
   unsigned lowerBound(Key k) const {
     if (k < keys[0]) {
-      return LeftMostIdx;
+      return LeftMostIdx;  // If k is less than the smallest key, return
+                           // LeftMostIdx
     }
     unsigned lower = 0;
     unsigned upper = header.count - 1;
+    unsigned result = lower;  // Initialize result to the first valid position
+
     do {
       unsigned mid = ((upper - lower) / 2) + lower;
       if (k < keys[mid]) {
-        upper = mid;
-      } else if (k > keys[mid]) {
-        lower = mid + 1;
+        upper = mid - 1;  // Move upper bound down if k is less than keys[mid]
       } else {
-        return mid;
+        result = mid;     // Track the last valid position where keys[mid] <= k
+        lower = mid + 1;  // Move lower bound up if k is greater than or equal
+                          // to keys[mid]
       }
-    } while (lower < upper);
-    return lower;
+    } while (lower <= upper);
+
+    return result;  // Return the nearest position where keys[result] <= k
+    // if (k < keys[0]) {
+    //   return LeftMostIdx;
+    // }
+    // unsigned lower = 0;
+    // unsigned upper = header.count - 1;
+    // do {
+    //   unsigned mid = ((upper - lower) / 2) + lower;
+    //   if (k < keys[mid]) {
+    //     upper = mid;
+    //   } else if (k > keys[mid]) {
+    //     lower = mid + 1;
+    //   } else {
+    //     return mid;
+    //   }
+    // } while (lower < upper);
+    // if (lower)
+    // return lower - 1;
   }
 
-  // TODO:adjust all
+  // TODO:adjustall
   int findIdx(uint64_t target_addr) {
     int end = header.count;
     for (int i = 0; i < end; i++) {

@@ -67,7 +67,7 @@ class BatchBTree {
   bool search(Key k, Value &result) {
     int restartCount = 0;
   restart:
-    if (restartCount++) yield(restartCount);
+    // if (restartCount++) yield(restartCount);
     NodePage *parent = super_root_;
     bool needRestart = false;
     bool refresh = false;
@@ -76,6 +76,7 @@ class BatchBTree {
 
     NodePage *cur_node = cache_.search_in_cache(root_ptr_);
     if (cur_node == nullptr) {
+      assert(false);
       // Load newest root
       load_newest_root(versionParent, needRestart);
       goto restart;
@@ -113,11 +114,16 @@ class BatchBTree {
         inner_child_ga.val = inner->values[idx];
       }
 
+      if (inner_child_ga.val == 0) {
+        printNodePage(*inner);
+        assert(false);
 
+      }
 
 
       if (needRestart) {
         if (refresh) {
+          assert(false);
           new_refresh_from_root(k);
         }
         goto restart;
@@ -169,12 +175,13 @@ class BatchBTree {
                 *(reinterpret_cast<GlobalAddress *>(&inner->values[idx])),
                 inner, idx, cur_node);
           }
-          cur_node->header.bitmap = 2;
+          cur_node->header.pos_state = 2;
           cur_node->writeUnlock();
           inner->IOUnlock();
         } else {
           inner->IOUnlock();
           if (refresh) {
+            assert(false);
             new_refresh_from_root(k);
           }
           goto restart;
@@ -412,6 +419,7 @@ class BatchBTree {
   }
 
   void new_refresh_from_root(Key k) {
+    assert(false);
     // refresh until we entered into the non-shared node (e.g., leaf)
     // A solution: all new nodes can be treated as shared node!
     int restartCount = 0;

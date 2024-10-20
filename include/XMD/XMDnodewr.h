@@ -362,6 +362,7 @@ bool check_limit_match(NodePage *parent, NodePage *child,
     min_limit = parent->header.min_limit_;
     max_limit = parent->keys[0];
   } else {
+    min_limit = parent->keys[idx];
     max_limit = (idx == parent->header.count - 1) ? parent->header.max_limit_
                                                   : parent->keys[idx + 1];
   }
@@ -391,6 +392,7 @@ bool new_check_limit_match(NodePage *parent, NodePage *child, unsigned idx) {
     min_limit = parent->header.min_limit_;
     max_limit = parent->keys[0];
   } else {
+    min_limit = parent->keys[idx];
     max_limit = (idx == parent->header.count - 1) ? parent->header.max_limit_
                                                   : parent->keys[idx + 1];
   }
