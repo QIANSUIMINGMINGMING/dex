@@ -6,6 +6,7 @@
 // #include <boost/unordered/unordered_map.hpp>
 #include <atomic>
 #include <iostream>
+#include <libcuckoo/cuckoohash_map.hh>
 #include <thread>
 
 #include "XMD_index_cache.h"
@@ -242,6 +243,24 @@ class BatchBTree {
   GlobalAddress root_ptr_ptr_;
   GlobalAddress root_ptr_;
 
+  struct hash_value {
+    std::atomic<int> KV_num;
+    std::vector<KVTS *> kvtss; 
+
+    hash_value() {
+      kvtss.reserve(100);
+    }
+  };
+
+  struct meta_value {
+    std::atomic<int> kids;
+    GlobalAddress parent_remote_addr;
+    int idx_in_parent;
+  };
+
+  libcuckoo::cuckoohash_map<GlobalAddress, hash_value*> nodeUpdatingTable;
+  libcuckoo::cuckoohash_map<GlobalAddress, meta_value*> TreeMetatable;
+
   int height_ = 0;
 
   BTree *bulk_load_tree_;
@@ -251,6 +270,10 @@ class BatchBTree {
   bool is_mine_;
 
   CacheManager cache_;
+
+  void phaseI() {}
+  void phaseII() {}
+  void phaseIII() {}
 
   void bulk_loading() {
     BTreeNode *bulk_tree_root = bulk_load_tree_->root;
