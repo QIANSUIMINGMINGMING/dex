@@ -23,6 +23,10 @@ DirectoryConnection::DirectoryConnection(uint16_t dirID, void *dsmPool,
     assert(false);
   }
 
+  printf("Main thread - dirCompChannel: %p, fd: %d\n",
+         (void *)dirCompChannel, dirCompChannel->fd);
+  printf("Main thread - cq: %p\n", (void *)cq);
+
   message = new RawMessageConnection(ctx, cq, DIR_MESSAGE_NR);
 
   message->initRecv();
