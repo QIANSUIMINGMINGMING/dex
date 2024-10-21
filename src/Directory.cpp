@@ -63,10 +63,10 @@ void Directory::dirThread() {
 }
 
 void Directory::process_message(const RawMessage *m) {
-  if (m->addr.nodeID != machineNR - 1) {
-    printf("m node ID %llu", m->addr.nodeID);
-    std::cout << "I'm" << (int)nodeID << std::endl;
-  }
+  // if (m->addr.nodeID != machineNR - 1) {
+  //   printf("m node ID %llu", m->addr.nodeID);
+  //   std::cout << "I'm" << (int)nodeID << std::endl;
+  // }
   RawMessage *send = nullptr;
   switch (m->type) {
 

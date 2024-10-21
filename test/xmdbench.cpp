@@ -546,6 +546,14 @@ void generate_workload() {
   std::cout << "Finish all workload generation" << std::endl;
 }
 
+void dirthread_run(int dirID) {
+  bindCore(39 - dirID);
+  int i = 0;
+  while (true) {
+    i = i + 1;
+  }
+}
+
 void thread_run(int id) {
   // Interleave the thread binding
   bindCore(id);
@@ -861,6 +869,11 @@ int main(int argc, char *argv[]) {
   numa_set_preferred(1);
   parse_args(argc, argv);
 
+  std::thread overhead_th[NR_DIRECTORY];
+  for (int i = 0; i < memThreadCount; i++) {
+    overhead_th[i] = std::thread( dirthread_run, i);
+  }
+
   DSMConfig config;
   config.machineNR = kNodeCount;
   config.memThreadCount = memThreadCount;
@@ -1083,6 +1096,10 @@ int main(int argc, char *argv[]) {
 
       for (int i = 0; i < kThreadCount; i++) {
         ths[i].join();
+      }
+
+      for (int i = 0; i < memThreadCount; i ++) {
+        overhead_th[i].join();
       }
 
       // for (int i = 0; i < kThreadCount; ++i) {
