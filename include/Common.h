@@ -58,7 +58,7 @@
 #define DIR_MESSAGE_NR 512
 // }
 
-#define NR_DIRECTORY 4
+#define NR_DIRECTORY 1
 
 #define LOCK_VERSION 1
 
