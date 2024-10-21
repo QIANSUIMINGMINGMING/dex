@@ -41,7 +41,11 @@ void Directory::dirThread() {
   printf("Event thread - cq: %p\n", (void *)dCon->cq);
 
   while (true) {
-    int ret = ibv_get_cq_event(dCon->dirCompChannel, &dCon->cq, nullptr);
+    struct ibv_cq *ev_cq;
+    void *ev_ctx;
+    int ret;
+    int ne;
+    ret = ibv_get_cq_event(dCon->dirCompChannel, &ev_cq, &ev_ctx);
     if (ret) {
       perror("Failed to get CQ event");
       fprintf(stderr, "Error number: %d\n", errno);
@@ -49,10 +53,10 @@ void Directory::dirThread() {
     }
 
     // Acknowledge the event
-    ibv_ack_cq_events(dCon->cq, 1);
+    ibv_ack_cq_events(ev_cq, 1);
 
     // Request notification for the next event
-    ret = ibv_req_notify_cq(dCon->cq, 0);
+    ret = ibv_req_notify_cq(ev_cq, 0);
     if (ret) {
       perror("Failed to request CQ notification");
       assert(false);
