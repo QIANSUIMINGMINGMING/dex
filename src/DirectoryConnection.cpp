@@ -12,15 +12,15 @@ DirectoryConnection::DirectoryConnection(uint16_t dirID, void *dsmPool,
   dirCompChannel = ibv_create_comp_channel(ctx.ctx);
   if (!dirCompChannel) {
     perror("Failed to create completion channel");
-    exit(1);  
+    assert(false);
   }
 
   cq = ibv_create_cq(ctx.ctx, RAW_RECV_CQ_COUNT, NULL, dirCompChannel, 0);
 
-  int ret = ibv_get_cq_event(dirCompChannel, &cq, nullptr);
+  int ret = ibv_req_notify_cq(cq, 0);
   if (ret) {
-    perror("Failed to get CQ event");
-    exit(1);
+    perror("Failed to request CQ notification");
+    assert(false);
   }
 
   message = new RawMessageConnection(ctx, cq, DIR_MESSAGE_NR);
