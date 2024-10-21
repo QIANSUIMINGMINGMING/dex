@@ -869,10 +869,10 @@ int main(int argc, char *argv[]) {
   numa_set_preferred(1);
   parse_args(argc, argv);
 
-  std::thread overhead_th[NR_DIRECTORY];
-  for (int i = 0; i < memThreadCount; i++) {
-    overhead_th[i] = std::thread( dirthread_run, i);
-  }
+  // std::thread overhead_th[NR_DIRECTORY];
+  // for (int i = 0; i < memThreadCount; i++) {
+  //   overhead_th[i] = std::thread( dirthread_run, i);
+  // }
 
   DSMConfig config;
   config.machineNR = kNodeCount;
@@ -1098,9 +1098,9 @@ int main(int argc, char *argv[]) {
         ths[i].join();
       }
 
-      for (int i = 0; i < memThreadCount; i ++) {
-        overhead_th[i].join();
-      }
+      // for (int i = 0; i < memThreadCount; i ++) {
+      //   overhead_th[i].join();
+      // }
 
       // for (int i = 0; i < kThreadCount; ++i) {
       //   total_max_time = std::max_element(total_time, total_time + k)
