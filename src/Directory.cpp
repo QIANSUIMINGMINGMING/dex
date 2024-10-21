@@ -36,9 +36,9 @@ void Directory::dirThread() {
   bindCore(39 - dirID);
   Debug::notifyInfo("dir %d launch!\n", dirID);
 
-  printf("Main thread - dirCompChannel: %p, fd: %d\n",
+  printf("Event thread - dirCompChannel: %p, fd: %d\n",
          (void *)dCon->dirCompChannel, dCon->dirCompChannel->fd);
-  printf("Main thread - cq: %p\n", (void *)dCon->cq);
+  printf("Event thread - cq: %p\n", (void *)dCon->cq);
 
   while (true) {
     int ret = ibv_get_cq_event(dCon->dirCompChannel, &dCon->cq, nullptr);

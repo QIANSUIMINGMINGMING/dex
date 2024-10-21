@@ -134,7 +134,7 @@ void DSM::initRDMAConnection() {
   }
 
   Debug::notifyInfo("NR_DIRECTORY: %d", NR_DIRECTORY);
-  for (int i = 0; i < NR_DIRECTORY; ++i) {
+  for (int i = 0; i < memThreadCount; ++i) {
     dirCon[i] =
         new DirectoryConnection(i, (void *)baseAddr, conf.dsmSize * define::GB,
                                 conf.machineNR, remoteInfo);
