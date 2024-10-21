@@ -8,7 +8,21 @@ DirectoryConnection::DirectoryConnection(uint16_t dirID, void *dsmPool,
     : dirID(dirID), remoteInfo(remoteInfo) {
 
   createContext(&ctx);
-  cq = ibv_create_cq(ctx.ctx, RAW_RECV_CQ_COUNT, NULL, NULL, 0);
+
+  dirCompChannel = ibv_create_comp_channel(ctx.ctx);
+  if (!dirCompChannel) {
+    perror("Failed to create completion channel");
+    exit(1);  
+  }
+
+  cq = ibv_create_cq(ctx.ctx, RAW_RECV_CQ_COUNT, NULL, dirCompChannel, 0);
+
+  int ret = ibv_get_cq_event(dirCompChannel, &cq, nullptr);
+  if (ret) {
+    perror("Failed to get CQ event");
+    exit(1);
+  }
+
   message = new RawMessageConnection(ctx, cq, DIR_MESSAGE_NR);
 
   message->initRecv();

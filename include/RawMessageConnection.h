@@ -39,6 +39,7 @@ public:
 
   void initSend();
   void sendRawMessage(RawMessage *m, uint32_t remoteQPN, ibv_ah *ah);
+  void sendRawMessageSolicited(RawMessage *m, uint32_t remoteQPN, ibv_ah *ah);
 };
 
 #endif /* __RAWMESSAGECONNECTION_H__ */

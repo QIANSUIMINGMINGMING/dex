@@ -34,6 +34,8 @@ struct DirectoryConnection {
 
   RemoteConnection *remoteInfo;
 
+  struct ibv_comp_channel *dirCompChannel = nullptr;
+
   DirectoryConnection(uint16_t dirID, void *dsmPool, uint64_t dsmSize,
                       uint32_t machineNR, RemoteConnection *remoteInfo);
 

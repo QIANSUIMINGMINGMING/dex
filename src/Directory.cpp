@@ -37,6 +37,22 @@ void Directory::dirThread() {
   Debug::notifyInfo("dir %d launch!\n", dirID);
 
   while (true) {
+    int ret = ibv_get_cq_event(dCon->dirCompChannel, &dCon->cq, nullptr);
+    if (ret) {
+      perror("Failed to get CQ event");
+      assert(false);
+    }
+
+    // Acknowledge the event
+    ibv_ack_cq_events(dCon->cq, 1);
+
+    // Request notification for the next event
+    ret = ibv_req_notify_cq(dCon->cq, 0);
+    if (ret) {
+      perror("Failed to request CQ notification");
+      assert(false);
+    }
+
     struct ibv_wc wc;
     pollWithCQ(dCon->cq, 1, &wc);
     switch (int(wc.opcode)) {
