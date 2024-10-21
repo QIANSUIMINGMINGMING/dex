@@ -529,7 +529,6 @@ class CacheManager {
     // Using range to check
     if (!new_check_limit_match(parent, target_node, child_idx)) {
       // target node
-      assert(false);
       {
         // XMD
         //  Check whether it is outdated
@@ -758,6 +757,7 @@ class CacheManager {
 
         // The following may happen because of SMO
         if (target_node->parent_ptr != target_parent) {
+          assert(false);
           target_parent->writeUnlock();
           target_node->writeUnlock();
           return false;
