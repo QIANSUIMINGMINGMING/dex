@@ -504,7 +504,8 @@ class CacheManager {
         0, 9999);
     auto idx = distribution(*generator);
     uint64_t admission_idx = 10000 * admission_rate_;
-    if (state == 1 && idx >= admission_idx) {
+    // if (state == 1 && idx >= admission_idx) {
+    if (true) {
       // Just read from remote and return to the application
       int ret = 1;
       switch (rpc_type) {
