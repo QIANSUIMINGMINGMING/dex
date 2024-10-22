@@ -46,24 +46,7 @@ struct TransferObj {
   u64 node_id{std::numeric_limits<u64>::max()};
 } __attribute__((packed));
 
-void printTransferObj(const TransferObj &obj, int numElementsToPrint = 5) {
-  printf("TransferObj {\n");
-  printf("  node_id: %lu,\n", obj.node_id);
-  printf("  psn: %lu,\n", obj.psn);
-  printf("  elements:\n");
-
-  // Ensure we don't exceed the array bounds
-  size_t elementsToPrint = std::min(numElementsToPrint, kMcCardinality);
-  for (size_t i = 0; i < elementsToPrint; ++i) {
-    printf("    elements[%lu]: ", i);
-    obj.elements[i].self_print();
-  }
-  if (elementsToPrint < kMcCardinality) {
-    printf("    ...\n");
-  }
-
-  printf("}\n");
-}
+void printTransferObj(const TransferObj &obj, int numElementsToPrint = 5);
 
 struct multicast_node {
   int id;

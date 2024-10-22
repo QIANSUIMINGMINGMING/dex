@@ -51,6 +51,24 @@ uint64_t check_package_loss(DSM *dsm, uint64_t psn_num) {
   return loss_packages;
 }
 
+void printTransferObj(const TransferObj &obj, int numElementsToPrint) {
+  printf("TransferObj {\n");
+  printf("  node_id: %lu,\n", obj.node_id);
+  printf("  psn: %lu,\n", obj.psn);
+  printf("  elements:\n");
+
+  // Ensure we don't exceed the array bounds
+  size_t elementsToPrint = std::min(numElementsToPrint, kMcCardinality);
+  for (size_t i = 0; i < elementsToPrint; ++i) {
+    printf("    elements[%lu]: ", i);
+    obj.elements[i].self_print();
+  }
+  if (elementsToPrint < kMcCardinality) {
+    printf("    ...\n");
+  }
+  printf("}\n");
+}
+
 struct rdma_event_channel *create_first_event_channel() {
   struct rdma_event_channel *channel;
   channel = rdma_create_event_channel();
