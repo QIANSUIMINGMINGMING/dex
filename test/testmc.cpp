@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
   DSM* dsm = DSM::getInstance(config);
 
   mcm = std::make_unique<XMD::multicast::multicastCM>(dsm);
-
+  mcm->print_self();
   while (true) {
 
   }
