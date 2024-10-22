@@ -132,7 +132,7 @@ multicastCM::multicastCM(DSM *dsm, u64 buffer_size, std::string mc_ip)
   maintainer = std::thread(mc_maintainer, dsm_, this);
   sleep(5);
 
-  dsm->barrier("create_multicast_agent", dsm->getComputeNum());
+  dsm->barrier("create_multicast_agent1", dsm->getComputeNum());
 };
 
 multicastCM::~multicastCM() { destroy_node(node); }
@@ -491,7 +491,7 @@ void *multicastCM::mc_maintainer(DSM *dsm, multicastCM *me) {
   int recv_handle_pos = 0;
   int empty_recv_num = 0;
 
-  dsm->barrier("create_multicast_agent", dsm->getComputeNum());
+  dsm->barrier("create_multicast_agent2", dsm->getComputeNum());
 
   while (true) {
     int num_comps =
