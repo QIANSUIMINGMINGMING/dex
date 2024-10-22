@@ -35,32 +35,32 @@ inline Key to_key(uint64_t k) {
   return (CityHash64((char *)&k, sizeof(k)) + 1) % kKeySpace;
 }
 
-void thread_run(int id) {
-  bindCore(id + XMD::multicastSendCore);
-  unsigned int seed = rdtsc();
-  struct zipf_gen_state state;
-  mehcached_zipf_init(&state, kKeySpace, zipfan,
-                      (rdtsc() & (0x0000ffffffffffffull)) ^ id);
-  int tob_pos = 0;
-  mcm->print_self();
+// void thread_run(int id) {
+//   bindCore(id + XMD::multicastSendCore);
+//   unsigned int seed = rdtsc();
+//   struct zipf_gen_state state;
+//   mehcached_zipf_init(&state, kKeySpace, zipfan,
+//                       (rdtsc() & (0x0000ffffffffffffull)) ^ id);
+//   int tob_pos = 0;
+//   mcm->print_self();
 
-  while (!is_end) {
-    uint64_t dis = mehcached_zipf_next(&state);
-    uint64_t key = to_key(dis);
-    Value v;
-    if (rand_r(&seed) % 100 < kReadRatio) {  // GET
-    } else {
-      v = 23;
-      TS ts = XMD::myClock::get_ts();
-      tob->insert(key, ts, v, tob_pos);
-      tob_pos++;
-      if (tob_pos == XMD::multicast::kMcCardinality) {
-        tob->emit();
-        tob_pos = 0;
-      }
-    }
-  }
-}
+//   while (!is_end) {
+//     uint64_t dis = mehcached_zipf_next(&state);
+//     uint64_t key = to_key(dis);
+//     Value v;
+//     if (rand_r(&seed) % 100 < kReadRatio) {  // GET
+//     } else {
+//       v = 23;
+//       TS ts = XMD::myClock::get_ts();
+//       tob->insert(key, ts, v, tob_pos);
+//       tob_pos++;
+//       if (tob_pos == XMD::multicast::kMcCardinality) {
+//         tob->emit();
+//         tob_pos = 0;
+//       }
+//     }
+//   }
+// }
 
 // void rate_limitor() {
 //   bindCore(rate_limit_core);
@@ -70,27 +70,36 @@ void thread_run(int id) {
 
 int main(int argc, char **argv) {
   // test the if the package is lost
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-
   printf("rate limit validate experiments start\n");
-  printf("page size %d, cardinality %d\n", kMcPageSize,
-         rdmacm::multicast::kMcCardinality);
+  printf("page size %d, cardinality %d\n", XMD::kMcPageSize,
+         XMD::multicast::kMcCardinality);
 
-  mcm = std::make_unique<rdmacm::multicast::multicastCM>();
-  tob = std::make_unique<TransferObjBuffer>();
+  DSMConfig config;
+  config.machineNR = 2;
+  config.memThreadCount = 1;
+  config.computeNR = 2;
+  config.index_type = 3;
+  DSM* dsm = DSM::getInstance(config);
 
-  for (int i = 0; i < kMaxMulticastSendCoreNum; i++) {
-    th[i] = std::thread(thread_run, i);
+  mcm = std::make_unique<XMD::multicast::multicastCM>(dsm);
+
+  while (true) {
+
   }
+  // tob = std::make_unique<TransferObjBuffer>();
 
-  for (int i = 0; i < kMaxMulticastSendCoreNum; i++) {
-    th[i].join();
-  }
+  // for (int i = 0; i < kMaxMulticastSendCoreNum; i++) {
+  //   th[i] = std::thread(thread_run, i);
+  // }
 
-  uint64_t loss_packages =
-      rdmacm::multicast::check_package_loss(FLAGS_psn_numbers);
-  double loss_rate = (double)loss_packages / FLAGS_psn_numbers;
-  printf("loss rate %f\n", loss_rate);
+  // for (int i = 0; i < kMaxMulticastSendCoreNum; i++) {
+  //   th[i].join();
+  // }
+
+  // uint64_t loss_packages =
+  //     rdmacm::multicast::check_package_loss(FLAGS_psn_numbers);
+  // double loss_rate = (double)loss_packages / FLAGS_psn_numbers;
+  // printf("loss rate %f\n", loss_rate);
   printf("test complete\n");
   return 0;
 }

@@ -258,8 +258,8 @@ class BatchBTree {
     int idx_in_parent;
   };
 
-  libcuckoo::cuckoohash_map<GlobalAddress, hash_value*> nodeUpdatingTable;
-  libcuckoo::cuckoohash_map<GlobalAddress, meta_value*> TreeMetatable;
+  // libcuckoo::cuckoohash_map<GlobalAddress, hash_value*> nodeUpdatingTable;
+  // libcuckoo::cuckoohash_map<GlobalAddress, meta_value*> TreeMetatable;
 
   int height_ = 0;
 

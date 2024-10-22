@@ -161,6 +161,7 @@ class multicastCM {
     printf("remote qkey: %d\n", node->remote_qkey);
     // ah address
     printf("ah address: %p\n", node->ah);
+    printf("ah GID: ");
     printf("send pos: %d\n", node->send_pos);
   }
 
