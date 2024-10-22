@@ -23,8 +23,8 @@ std::atomic<uint64_t> recv_psn;
 // std::unique_ptr<XMD::multicast::TransferObjBuffer> tob;
 XMD::multicast::TransferObjBuffer* tob;
 
-int send_thread_num = 4;
-int recv_thread_num = 4;
+int send_thread_num = 1;
+int recv_thread_num = 1;
 
 struct Request {
   bool is_search;
@@ -53,7 +53,6 @@ void thread_run(int id) {
   struct zipf_gen_state state;
   mehcached_zipf_init(&state, kKeySpace, zipfan,
                       (rdtsc() & (0x0000ffffffffffffull)) ^ id);
-  mcm->print_self();
 
   int thread_pack = (XMD::multicast::kMcCardinality * psn_numbers) / send_thread_num;
   int i = 0;
@@ -109,6 +108,8 @@ int main(int argc, char **argv) {
   for (int i = 0; i < recv_thread_num + send_thread_num; i++) {
     th[i].join();
   }
+
+  emit_thread.join();
 
   for (int i = 0;i< psn_numbers;i++) {
     XMD::multicast::printTransferObj(recv_objs[i]);
