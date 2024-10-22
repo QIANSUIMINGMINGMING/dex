@@ -4,6 +4,7 @@
 
 
 #include "XMD/mc_agent.h"
+#include "XMD/mc_agent_v1.h"
 #include "zipf.h"
 
 // parameters
@@ -11,7 +12,8 @@ uint64_t kKeySpace = 64 * define::MB;
 double zipfan = 0;
 double kReadRatio = 50;
 
-std::unique_ptr<XMD::multicast::multicastCM> mcm;
+std::unique_ptr<XMD::multicast::multicastCM> mcm1;
+std::unique_ptr<rdmacm::multicast::multicastCM> mcm2;
 
 std::thread th[MAX_APP_THREAD];
 bool is_end = false;
@@ -81,8 +83,10 @@ int main(int argc, char **argv) {
   config.index_type = 3;
   DSM* dsm = DSM::getInstance(config);
 
-  mcm = std::make_unique<XMD::multicast::multicastCM>(dsm);
-  mcm->print_self();
+  // mcm1 = std::make_unique<XMD::multicast::multicastCM>(dsm);
+  // mcm1->print_self();
+  mcm2 = std::make_unique<rdmacm::multicast::multicastCM>(dsm);
+
   while (true) {
 
   }

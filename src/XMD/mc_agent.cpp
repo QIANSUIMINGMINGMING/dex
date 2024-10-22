@@ -102,6 +102,7 @@ multicastCM::multicastCM(DSM *dsm, u64 buffer_size, std::string mc_ip)
       cnode_id(dsm->getMyNodeID()),
       mcIp(mc_ip),
       mbr(buffer_size * 1024 * 1024 * 1024) {
+  
   if (alloc_nodes()) exit(1);
 
   pthread_create(&cmathread, NULL, cma_thread_worker, node);
