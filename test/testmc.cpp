@@ -83,9 +83,9 @@ int main(int argc, char **argv) {
   config.index_type = 3;
   DSM* dsm = DSM::getInstance(config);
 
-  // mcm1 = std::make_unique<XMD::multicast::multicastCM>(dsm);
-  // mcm1->print_self();
-  mcm2 = std::make_unique<rdmacm::multicast::multicastCM>(dsm);
+  mcm1 = std::make_unique<XMD::multicast::multicastCM>(dsm);
+  mcm1->print_self();
+  // mcm2 = std::make_unique<rdmacm::multicast::multicastCM>(dsm);
 
   while (true) {
 
