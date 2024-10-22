@@ -18,8 +18,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <condition_variable>
+#include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <functional>
+#include <iostream>
+#include <limits>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -41,66 +46,24 @@ struct TransferObj {
   u64 node_id{std::numeric_limits<u64>::max()};
 } __attribute__((packed));
 
-class TransferObjBuffer {
- public:
-  TransferObjBuffer(size_t buffer_size)
-      : buffer_size_(buffer_size), write_index_(0), full_flag_(false) {
-    // Initialize buffer to hold TransferObjs
-    buffer_.reserve(buffer_size_);
+void printTransferObj(const TransferObj &obj, int numElementsToPrint = 5) {
+  printf("TransferObj {\n");
+  printf("  node_id: %lu,\n", obj.node_id);
+  printf("  psn: %lu,\n", obj.psn);
+  printf("  elements:\n");
+
+  // Ensure we don't exceed the array bounds
+  size_t elementsToPrint = std::min(numElementsToPrint, kMcCardinality);
+  for (size_t i = 0; i < elementsToPrint; ++i) {
+    printf("    elements[%lu]: ", i);
+    obj.elements[i].self_print();
+  }
+  if (elementsToPrint < kMcCardinality) {
+    printf("    ...\n");
   }
 
-  // Insert a KVTS (k, ts, v) into the current TransferObj in the buffer
-  bool insert(uint64_t k, uint64_t ts, uint64_t v) {
-    if (full_flag_.load()) {
-      return false;  // Buffer is full
-    }
-
-    size_t index = write_index_.fetch_add(1, std::memory_order_relaxed);
-
-    if (index < buffer_size_) {
-      // Get the current TransferObj to insert data into
-      TransferObj &current_obj = buffer_[index / kMcCardinality];
-      size_t element_index = index % kMcCardinality;
-      current_obj.elements[element_index] = {k, ts, v};
-
-      if (element_index == kMcCardinality - 1) {
-        // When the current TransferObj is full, move to the next
-        full_flag_.store(true, std::memory_order_release);
-      }
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  // Send the TransferObj to remote when full
-  void send_to_remote() {
-    if (full_flag_.load()) {
-      // Simulate sending to remote
-      for (const auto &transfer_obj : buffer_) {
-        send(transfer_obj);
-      }
-      reset();
-    }
-  }
-
- private:
-  void send(const TransferObj &obj) {
-    std::cout << "Sending TransferObj to remote (psn: " << obj.psn
-              << ", node_id: " << obj.node_id << ")...\n";
-  }
-
-  void reset() {
-    // Reset the buffer and write index
-    write_index_.store(0, std::memory_order_relaxed);
-    full_flag_.store(false, std::memory_order_release);
-  }
-
-  size_t buffer_size_;
-  std::vector<TransferObj> buffer_;  // Buffer of TransferObjs
-  std::atomic<size_t> write_index_;  // Current write index
-  std::atomic<bool> full_flag_;      // Indicates if the buffer is full
-};
+  printf("}\n");
+}
 
 struct multicast_node {
   int id;
@@ -152,7 +115,7 @@ class multicastCM {
   uint64_t get_cnode_id() { return cnode_id; }
   multicast_node *getNode() { return node; }
 
-  void fetch_message(TransferObj *&message);
+  void fetch_message(TransferObj *message);
   void print_self() {
     printf("transferobj size %lu\n", sizeof(TransferObj));
     printf("node: %d\n", node->id);
@@ -200,7 +163,7 @@ class multicastCM {
 
   // recv handling components
   std::thread maintainer;
-  moodycamel::ConcurrentQueue<uint8_t *> recv_message_addrs;
+  moodycamel::ConcurrentQueue<TransferObj *> recv_obj_ptrs;
 
   // rdma info for multicast
   struct multicast_node *node;  // default one group
@@ -209,44 +172,117 @@ class multicastCM {
   struct ibv_pd *pd;
   utils::SynchronizedMonotonicBufferRessource mbr;
   DSM *dsm_;
-
-  // memcached info
-  memcached_st *memc;
-  std::string SERVER_NUM_KEY;
-  std::string NODE_PSN_KEY;
 };
 
+constexpr int BUFFER_SIZE = kMcMaxPostList / 2;
+// BufferPool class to manage two buffers and threading
+class TransferObjBuffer {
+ public:
+  multicastCM *my_cm_;
+  multicast_node *cm_node_;
+  int cur_psn{0};
 
-// class TransferObjBuffer {
-//  public:
-//   TransferObjBuffer(multicastCM *agent) {
-//     struct multicast_node *mc_node;
-//     mc_node = agent_->getNode();
-//     buffer = (TransferObj *)(mc_node->send_messages);
-//   }
+  TransferObj *buffers_[BUFFER_SIZE];
+  int active_buffer_{0};
+  uint64_t maxSeqN{0};
+  uint64_t buffer_start_seqn[BUFFER_SIZE]{0};
+  std::atomic<uint64_t> buffer_element_count[BUFFER_SIZE]{0};
+  std::atomic<cutil::ull_t> buffer_mutex{0};
+  std::atomic<uint64_t> cur_global_se_max{0};
 
-//   void insert(Key k, TS ts, Value v, int pos) {
-//     buffer->elements[pos] = {k, v, ts};
-//   }
+  std::atomic<int> buffer_full_cv[BUFFER_SIZE]{0};
 
-//   void emit() {
-//     buffer->psn = cur_psn;
-//     // if (cur_psn == FLAGS_psn_numbers - 1) {
-//     //   is_end = true;
-//     // }
-//     buffer->node_id = agent_->get_cnode_id();
-//     cur_psn++;
-//     int cur_pos = agent_->get_pos(buffer);
-//     agent_->send_message(cur_pos);
-//   }
+  TransferObjBuffer(multicastCM *cm) : my_cm_(cm) {
+    cm_node_ = my_cm_->getNode();
+    for (int i = 0; i < BUFFER_SIZE; i++) {
+      buffer_start_seqn[i] = (static_cast<uint64_t>(i * kMcCardinality));
+      buffers_[i] = (TransferObj *)(cm_node_->send_messages + kMcPageSize * i);
+    }
+    maxSeqN = BUFFER_SIZE * kMcCardinality;
+  }
 
-//   void get_psn(uint64_t &psn) { psn = cur_psn; }
+  ~TransferObjBuffer() {}
 
-//  private:
-//   TransferObj *buffer;
-//   uint64_t cur_psn{0};
-//   multicastCM *agent_;
-// };
+  void packKVTS(const KVTS &kvts) {
+    int my_pos = cur_global_se_max.fetch_add(1);
+    while (!can_go(my_pos));
+    for (int i = 0; i < BUFFER_SIZE; i++) {
+      if (my_pos >= buffer_start_seqn[i] &&
+          my_pos < (buffer_start_seqn[i] + kMcCardinality)) {
+        TransferObj *obj_place = buffers_[i];
+        KVTS *set_place = (obj_place->elements) + (my_pos % kMcCardinality);
+        set_place->k = kvts.k;
+        set_place->ts = kvts.ts;
+        set_place->v = kvts.v;
+        if (buffer_element_count[i].fetch_add(1) == kMcCardinality - 1) {
+          // set conditional variable for sending
+          buffer_full_cv[i].store(1);
+        }
+        break;
+      }
+    }
+  }
+
+  bool can_go(uint64_t pos) {
+    int restartCount = 0;
+  restart:
+    if (restartCount++) yield(restartCount);
+    bool need_restart = false;
+    cutil::ull_t cur_v =
+        cutil::read_lock_or_restart(buffer_mutex, need_restart);
+    if (need_restart) {
+      goto restart;
+    }
+    bool can_go = pos < maxSeqN;
+    cutil::read_unlock_or_restart(buffer_mutex, cur_v, need_restart);
+    if (need_restart) {
+      goto restart;
+    }
+    return can_go;
+  }
+
+  void sendBuffers() {
+    while (true) {
+      int buf_idx = active_buffer_;
+      // wait conditional variable and send buffer_[active_buffer_], you do not
+      // need to care rdma_Send
+      while (buffer_full_cv[buf_idx].load() == 0) {
+        yield(1);
+      }
+
+      TransferObj *next_buffer_field;
+      int node_send_pos = my_cm_->get_pos(next_buffer_field);
+      next_buffer_field->node_id = my_cm_->get_cnode_id();
+      next_buffer_field->psn = cur_psn;
+      cur_psn++;
+      my_cm_->send_message(node_send_pos);
+
+      // update buffer fields
+      bool need_restart = false;
+      cutil::ull_t cur_v =
+          cutil::read_lock_or_restart(buffer_mutex, need_restart);
+      if (need_restart) {
+        assert(false);
+      }
+      cutil::upgrade_to_write_lock_or_restart(buffer_mutex, cur_v,
+                                              need_restart);
+      if (need_restart) {
+        assert(false);
+      }
+
+      buffers_[active_buffer_] = next_buffer_field;
+      buffer_element_count[active_buffer_].store(0);
+      buffer_start_seqn[active_buffer_] = maxSeqN;
+      maxSeqN += kMcCardinality;
+
+      active_buffer_ = RING_ADD(active_buffer_, 1, BUFFER_SIZE);
+
+      cutil::write_unlock(buffer_mutex);
+      // then change active_buffer_ to next
+      // Then modify the maxSeqN and other corresponding fields
+    }
+  }
+};
 
 };  // namespace multicast
 };  // namespace XMD

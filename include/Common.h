@@ -28,6 +28,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <xmmintrin.h>
 
 #include "Debug.h"
 #include "HugePageAlloc.h"
@@ -45,7 +46,7 @@
 
 #define LATENCY_WINDOWS 1000000
 
-#define STRUCT_OFFSET(type, field)                                             \
+#define STRUCT_OFFSET(type, field) \
   (char *)&((type *)(0))->field - (char *)((type *)(0))
 
 #define UNUSED(x) (void)(x)
@@ -56,7 +57,7 @@
 
 #define ADD_ROUND(x, n) ((x) = ((x) + 1) % (n))
 
-#define MESSAGE_SIZE 96 // byte
+#define MESSAGE_SIZE 96  // byte
 
 #define POST_RECV_PER_RC_QP 128
 
@@ -118,11 +119,11 @@ constexpr uint64_t GB = 1024ull * MB;
 constexpr uint16_t kCacheLineSize = 64;
 
 // for remote allocate
-constexpr uint64_t dsmSize = 64; // GB  [CONFIG]
+constexpr uint64_t dsmSize = 64;  // GB  [CONFIG]
 constexpr uint64_t kChunkSize = 32 * MB;
 
 // RDMA buffer
-constexpr uint64_t rdmaBufferSize = 2; // GB  [CONFIG]
+constexpr uint64_t rdmaBufferSize = 2;  // GB  [CONFIG]
 constexpr int64_t aligned_cache = ~((1ULL << 6) - 1);
 constexpr int64_t kPerThreadRdmaBuf =
     (rdmaBufferSize * define::GB / MAX_APP_THREAD) & aligned_cache;
@@ -149,9 +150,9 @@ constexpr uint64_t kNumOfLock = kLockChipMemSize / sizeof(uint64_t);
 
 // For SMART
 constexpr uint64_t kLocalLockNum =
-    4 * MB; // tune to an appropriate value (as small as possible without affect
-            // the performance)
-constexpr uint64_t kOnChipLockNum = kLockChipMemSize * 8; // 1bit-lock
+    4 * MB;  // tune to an appropriate value (as small as possible without
+             // affect the performance)
+constexpr uint64_t kOnChipLockNum = kLockChipMemSize * 8;  // 1bit-lock
 
 // level of tree
 constexpr uint64_t kMaxLevelOfTree = 7;
@@ -162,8 +163,8 @@ constexpr uint16_t kMaxCoro = 8;
 
 constexpr uint8_t kMaxHandOverTime = 8;
 
-constexpr int kIndexCacheSize = 512; // MB
-} // namespace define
+constexpr int kIndexCacheSize = 512;  // MB
+}  // namespace define
 
 static inline unsigned long long asm_rdtsc(void) {
   unsigned hi, lo;
@@ -201,6 +202,9 @@ inline void mfence() { asm volatile("mfence" ::: "memory"); }
 inline void compiler_barrier() { asm volatile("" ::: "memory"); }
 
 namespace XMD {
+
+void yield(int count); 
+
 // -------------------------------------------------------------------------------------
 // ensure is similar to assert except that it is never out compiled
 #define always_check(e)                                                \
@@ -344,7 +348,7 @@ struct KVTS {
   KVTS() {}
   KVTS(Key k, Value v, TS ts) : k(k), v(v), ts(ts) {}
 
-  inline void self_print() {
+  inline void self_print() const {
     // print Key
     printf("K %lu,", k);
     printf("V %lu, TS %lu\n", v, ts);
@@ -546,12 +550,11 @@ inline void write_unlock_obsolete(
 // uint64_t memcachedFetchAndAdd(struct memcached_st *memc, const char *key,
 //                               uint32_t klen);
 
-// void memcached_barrier(struct memcached_st *memc, const std::string &barrierKey,
+// void memcached_barrier(struct memcached_st *memc, const std::string
+// &barrierKey,
 //                        uint64_t num_server);
 // };  // namespace memcached_util
 
-} // XMD
-
-
+}  // namespace XMD
 
 #endif /* __COMMON_H__ */

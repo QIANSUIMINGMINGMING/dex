@@ -68,7 +68,7 @@ class BatchBTree {
   bool search(Key k, Value &result) {
     int restartCount = 0;
   restart:
-    // if (restartCount++) yield(restartCount);
+    if (restartCount++) yield(restartCount);
     NodePage *parent = super_root_;
     bool needRestart = false;
     bool refresh = false;
@@ -118,9 +118,7 @@ class BatchBTree {
       if (inner_child_ga.val == 0) {
         printNodePage(*inner);
         assert(false);
-
       }
-
 
       if (needRestart) {
         if (refresh) {
@@ -163,7 +161,6 @@ class BatchBTree {
           remote_flag = cache_.cold_to_hot(inner_child_ga,
                                            reinterpret_cast<void **>(&cur_node),
                                            inner, idx, refresh);
-                                
         }
 
         // Admission succeed
@@ -195,7 +192,6 @@ class BatchBTree {
 
       // printNodePage(*cur_node);
     }
-
 
     // Access the leaf node
     NodePage *leaf = cur_node;
@@ -245,11 +241,9 @@ class BatchBTree {
 
   struct hash_value {
     std::atomic<int> KV_num;
-    std::vector<KVTS *> kvtss; 
+    std::vector<KVTS *> kvtss;
 
-    hash_value() {
-      kvtss.reserve(100);
-    }
+    hash_value() { kvtss.reserve(100); }
   };
 
   struct meta_value {

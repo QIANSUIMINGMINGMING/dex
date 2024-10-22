@@ -102,7 +102,6 @@ multicastCM::multicastCM(DSM *dsm, u64 buffer_size, std::string mc_ip)
       cnode_id(dsm->getMyNodeID()),
       mcIp(mc_ip),
       mbr(buffer_size * 1024 * 1024 * 1024) {
-  
   if (alloc_nodes()) exit(1);
 
   pthread_create(&cmathread, NULL, cma_thread_worker, node);
@@ -254,23 +253,25 @@ int multicastCM::create_message(struct multicast_node *node) {
   return 0;
 }
 
-void multicastCM::fetch_message(TransferObj *&message) {
-  uint8_t *message_addr;
-  bool got = recv_message_addrs.try_dequeue(message_addr);
+void multicastCM::fetch_message(TransferObj *message) {
+  // message = new TransferObj;
+  TransferObj *message_place;
+  bool got = recv_obj_ptrs.try_dequeue(message_place);
   while (!got) {
-    got = recv_message_addrs.try_dequeue(message_addr);
+    got = recv_obj_ptrs.try_dequeue(message_place);
   }
-  message = (TransferObj *)(message_addr + 40);  // ud padding
-  // validate psn
+  memcpy(message, message_place, kMcPageSize);
 }
 
 void multicastCM::handle_recv(struct multicast_node *node, int id) {
 #if defined(SINGLE_KEY)
   assert(false);
 #elif defined(KEY_PAGE)
-  uint8_t *message =
-      node->recv_messages + id * kRecvMcPageSize;  // no ud padding
-  recv_message_addrs.enqueue(message);
+  uint8_t *message = node->recv_messages + id * kRecvMcPageSize +
+                     (kRecvMcPageSize - kMcPageSize);  // no ud padding
+  TransferObj *recv_obj_ptr = reinterpret_cast<TransferObj *>(message);
+  if (recv_obj_ptr->node_id != cnode_id) recv_obj_ptrs.enqueue(recv_obj_ptr);
+    // recv_message_addrs.enqueue(message);
 #elif defined(FILTER_PAGE)
 #else
   assert(false);
@@ -411,7 +412,7 @@ int multicastCM::get_pos(TransferObj *&next_message_address) {
   return pos;
 }
 
-//return the sent position
+// return the sent position
 int multicastCM::send_message(int pos) {
   struct ibv_send_wr *bad_send_wr;
   ibv_send_wr *send_wr = &node->send_wr[pos];
@@ -425,6 +426,8 @@ int multicastCM::send_message(int pos) {
   if (ret) {
     printf("failed to post sends: %d\n", ret);
   }
+
+  return ret;
 }
 
 void *multicastCM::cma_thread_worker(void *arg) {
@@ -486,16 +489,16 @@ void *multicastCM::mc_maintainer(DSM *dsm, multicastCM *me) {
       struct ibv_wc *wc = &wc_buffer[pos];
       assert(wc->status == IBV_WC_SUCCESS && wc->opcode == IBV_WC_RECV);
       // memcpy
-      me->handle_recv(node, pos % kMcMaxPostList);
+      me->handle_recv(node, pos % kMcMaxRecvPostList);
     }
     // me->handle_recv_bulk(node, recv_handle_pos, num_comps);
 
-    recv_handle_pos = RING_ADD(recv_handle_pos, num_comps, kMcMaxPostList);
+    recv_handle_pos = RING_ADD(recv_handle_pos, num_comps, kMcMaxRecvPostList);
 
     // batch post recvs
     if (empty_recv_num >= kpostlist) {
       for (int w_i = 0; w_i < empty_recv_num; w_i++) {
-        int pos = RING_ADD(empty_start_pos, w_i, kMcMaxPostList);
+        int pos = RING_ADD(empty_start_pos, w_i, kMcMaxRecvPostList);
         node->recv_wr[pos].next =
             w_i == empty_recv_num - 1
                 ? nullptr

@@ -43,3 +43,12 @@ char *getMac() {
 
   return (char *)ifr.ifr_hwaddr.sa_data;
 }
+
+namespace XMD {
+void yield(int count) {
+  if (count > 3)
+    sched_yield();
+  else
+    _mm_pause();
+}
+}

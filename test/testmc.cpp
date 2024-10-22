@@ -1,8 +1,5 @@
 #include <city.h>
 
-#include <boost/circular_buffer.hpp>
-
-
 #include "XMD/mc_agent.h"
 #include "XMD/mc_agent_v1.h"
 #include "zipf.h"
@@ -12,20 +9,22 @@ uint64_t kKeySpace = 64 * define::MB;
 double zipfan = 0;
 double kReadRatio = 50;
 
-std::unique_ptr<XMD::multicast::multicastCM> mcm1;
-std::unique_ptr<rdmacm::multicast::multicastCM> mcm2;
+// std::unique_ptr<XMD::multicast::multicastCM> mcm;
+// std::unique_ptr<rdmacm::multicast::multicastCM> mcm2;
+XMD::multicast::multicastCM *mcm;
 
 std::thread th[MAX_APP_THREAD];
-bool is_end = false;
 
-constexpr uint64_t psn_numbers = 10000;
-// constexpr uint64_t  
-// DEFINE_int64(psn_numbers, 100, "The number of psn to be used");
-// DEFINE_int64(rate_limit_node_id, 0, "The node id to be used");
-// DEFINE_int64(number_per_10_us, 1000,
-//              "The number of messages to be sent per 10 us");
+constexpr uint64_t psn_numbers = 20;
 
-std::unique_ptr<XMD::multicast::TransferObjBuffer> tob;
+XMD::multicast::TransferObj recv_objs[psn_numbers];
+std::atomic<uint64_t> recv_psn;
+
+// std::unique_ptr<XMD::multicast::TransferObjBuffer> tob;
+XMD::multicast::TransferObjBuffer* tob;
+
+int send_thread_num = 4;
+int recv_thread_num = 4;
 
 struct Request {
   bool is_search;
@@ -37,38 +36,42 @@ inline Key to_key(uint64_t k) {
   return (CityHash64((char *)&k, sizeof(k)) + 1) % kKeySpace;
 }
 
-// void thread_run(int id) {
-//   bindCore(id + XMD::multicastSendCore);
-//   unsigned int seed = rdtsc();
-//   struct zipf_gen_state state;
-//   mehcached_zipf_init(&state, kKeySpace, zipfan,
-//                       (rdtsc() & (0x0000ffffffffffffull)) ^ id);
-//   int tob_pos = 0;
-//   mcm->print_self();
+void recv_thread_run(int id) {
+  bindCore(id + XMD::multicastSendCore);
+  while (true) {
+    int this_psn = recv_psn.fetch_add(1);
+    if (this_psn >= psn_numbers) {
+      break;
+    }
+    mcm->fetch_message(&recv_objs[this_psn]);
+  }
+}
 
-//   while (!is_end) {
-//     uint64_t dis = mehcached_zipf_next(&state);
-//     uint64_t key = to_key(dis);
-//     Value v;
-//     if (rand_r(&seed) % 100 < kReadRatio) {  // GET
-//     } else {
-//       v = 23;
-//       TS ts = XMD::myClock::get_ts();
-//       tob->insert(key, ts, v, tob_pos);
-//       tob_pos++;
-//       if (tob_pos == XMD::multicast::kMcCardinality) {
-//         tob->emit();
-//         tob_pos = 0;
-//       }
-//     }
-//   }
-// }
+void thread_run(int id) {
+  bindCore(id + XMD::multicastSendCore);
+  unsigned int seed = rdtsc();
+  struct zipf_gen_state state;
+  mehcached_zipf_init(&state, kKeySpace, zipfan,
+                      (rdtsc() & (0x0000ffffffffffffull)) ^ id);
+  mcm->print_self();
 
-// void rate_limitor() {
-//   bindCore(rate_limit_core);
-//   while (true) {
-//   }
-// }
+  int thread_pack = (XMD::multicast::kMcCardinality * psn_numbers) / send_thread_num;
+  int i = 0;
+
+  while (i < thread_pack) {
+    uint64_t dis = mehcached_zipf_next(&state);
+    uint64_t key = to_key(dis);
+    Value v;
+    if (rand_r(&seed) % 100 < kReadRatio) {  // GET
+    } else {
+      v = 23;
+      TS ts = XMD::myClock::get_ts();
+      // tob->insert(key, ts, v, tob_pos);
+      tob->packKVTS(XMD::KVTS(key, ts, v));
+    }
+    i++;
+  }
+}
 
 int main(int argc, char **argv) {
   // test the if the package is lost
@@ -81,21 +84,35 @@ int main(int argc, char **argv) {
   config.memThreadCount = 1;
   config.computeNR = 2;
   config.index_type = 3;
-  DSM* dsm = DSM::getInstance(config);
+  DSM *dsm = DSM::getInstance(config);
 
-  mcm1 = std::make_unique<XMD::multicast::multicastCM>(dsm);
-  mcm1->print_self();
+  mcm = new XMD::multicast::multicastCM(dsm);
+  mcm->print_self();
   // mcm2 = std::make_unique<rdmacm::multicast::multicastCM>(dsm);
 
-  while (true) {
+  dsm->barrier("init-mc");
 
+  tob = new XMD::multicast::TransferObjBuffer(mcm);
+
+  std::thread emit_thread(&XMD::multicast::TransferObjBuffer::sendBuffers, tob);
+
+  for (int i = 0; i < recv_thread_num; i ++) {
+    th[i] = std::thread(recv_thread_run, i);
   }
-  // tob = std::make_unique<TransferObjBuffer>();
 
-  // for (int i = 0; i < kMaxMulticastSendCoreNum; i++) {
-  //   th[i] = std::thread(thread_run, i);
-  // }
+  dsm->barrier("init-recv");
 
+  for (int i = 0; i < send_thread_num; i++) {
+    th[i+recv_thread_num] = std::thread(thread_run, i);
+  }
+
+  for (int i = 0; i < recv_thread_num + send_thread_num; i++) {
+    th[i].join();
+  }
+
+  for (int i = 0;i< psn_numbers;i++) {
+    XMD::multicast::printTransferObj(recv_objs[i]);
+  }
   // for (int i = 0; i < kMaxMulticastSendCoreNum; i++) {
   //   th[i].join();
   // }
