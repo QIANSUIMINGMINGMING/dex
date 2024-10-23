@@ -46,7 +46,7 @@ void Directory::dirThread() {
 
   if (set_sched_deadline(tid, runtime_ns, deadline_ns, period_ns) != 0) {
     std::cerr << "Failed to set SCHED_DEADLINE: " << strerror(errno)
-              << std::endl;
+                << " (errno: " << errno << ")" << std::endl;
     // 根据需要决定是否终止线程或采取其他措施
     // exit(1);
   } else {
