@@ -8,6 +8,31 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+static int sched_setattr(pid_t pid, const struct sched_attr *attr,
+                         unsigned int flags) {
+  return syscall(SYS_sched_setattr, pid, attr, flags);
+}
+
+// 实现sched_getattr函数（可选，用于调试）
+static int sched_getattr(pid_t pid, struct sched_attr *attr, unsigned int size,
+                         unsigned int flags) {
+  return syscall(SYS_sched_getattr, pid, attr, size, flags);
+}
+
+int set_sched_deadline(pid_t pid, uint64_t runtime_ns, uint64_t deadline_ns,
+                       uint64_t period_ns) {
+  struct sched_attr attr;
+  memset(&attr, 0, sizeof(attr));
+  attr.size = sizeof(attr);
+  attr.sched_policy = SCHED_DEADLINE;
+  attr.sched_flags = 0;
+  attr.sched_runtime = runtime_ns;
+  attr.sched_deadline = deadline_ns;
+  attr.sched_period = period_ns;
+
+  return sched_setattr(pid, &attr, 0);
+}
+
 void bindCore(uint16_t core) {
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
