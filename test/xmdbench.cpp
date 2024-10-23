@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <libcgroup.h>
 
 #include <algorithm>
 #include <cmath>
@@ -897,6 +898,90 @@ int main(int argc, char *argv[]) {
   uint64_t total_cluster_tp = 0;
   uint64_t straggler_cluster_tp = 0;
   uint64_t collect_times = 0;
+
+  if (node_id == CNodeCount && CNodeCount!=1) {
+    const char *cg_name = "limit_cpu_cgroup";
+    struct cgroup *cg;
+    struct cgroup_controller *cpu_ctrl;
+    int ret;
+
+    // Initialize the cgroup library
+    if (cgroup_init() != 0) {
+      fprintf(stderr, "Failed to initialize cgroup library\n");
+      return EXIT_FAILURE;
+    }
+
+    // Create a new cgroup
+    cg = cgroup_new_cgroup(cg_name);
+    if (!cg) {
+      fprintf(stderr, "Failed to create cgroup structure\n");
+      return EXIT_FAILURE;
+    }
+
+    // Add the CPU controller to the cgroup
+    cpu_ctrl = cgroup_add_controller(cg, "cpu");
+    if (!cpu_ctrl) {
+      fprintf(stderr, "Failed to add CPU controller\n");
+      cgroup_free(&cg);
+      return EXIT_FAILURE;
+    }
+
+    // Create the cgroup in the system
+    ret = cgroup_create_cgroup(cg, 0);
+    if (ret < 0) {
+      fprintf(stderr, "Failed to create cgroup in system: %s\n",
+              strerror(-ret));
+      cgroup_free(&cg);
+      return EXIT_FAILURE;
+    }
+
+    // Set CPU quota to 50% of the default period
+    // First, retrieve the default period
+    char *period_str = NULL;
+    ret = cgroup_get_value_string(cpu_ctrl, "cpu.cfs_period_us", &period_str);
+    if (ret < 0) {
+      fprintf(stderr, "Failed to get cpu.cfs_period_us: %s\n", strerror(-ret));
+      cgroup_free(&cg);
+      return EXIT_FAILURE;
+    }
+
+    long period = atol(period_str);
+    if (period <= 0) {
+      fprintf(stderr, "Invalid cpu.cfs_period_us value: %s\n", period_str);
+      cgroup_free(&cg);
+      return EXIT_FAILURE;
+    }
+
+    // Calculate 50% of the period
+    long quota = period / 2;
+    char quota_str[32];
+    snprintf(quota_str, sizeof(quota_str), "%ld", quota);
+
+    // Set cpu.cfs_quota_us to 50% of the period
+    ret = cgroup_set_value_string(cpu_ctrl, "cpu.cfs_quota_us", quota_str);
+    if (ret < 0) {
+      fprintf(stderr, "Failed to set cpu.cfs_quota_us: %s\n", strerror(-ret));
+      cgroup_free(&cg);
+      return EXIT_FAILURE;
+    }
+
+    // Optionally, verify the settings
+    char* verify_quota = nullptr;
+    ret = cgroup_get_value_string(cpu_ctrl, "cpu.cfs_quota_us", &verify_quota);
+    if (ret == 0) {
+      printf("Set cpu.cfs_quota_us to %s\n", verify_quota);
+    }
+
+    // Attach the current process to the cgroup
+    ret = cgroup_attach_task_pid(cg, getpid());
+    if (ret < 0) {
+      fprintf(stderr, "Failed to attach task to cgroup: %s\n", strerror(-ret));
+      cgroup_free(&cg);
+      return EXIT_FAILURE;
+    }
+
+    printf("CPU usage limited to 50%% for this process.\n");
+  }
 
   if (node_id < CNodeCount) {
     dsm->registerThread();

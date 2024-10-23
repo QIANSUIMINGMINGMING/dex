@@ -26,7 +26,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++17")
 find_package(TBB REQUIRED tbb tbbmalloc)
 
 # Link Options
-set(LINKS_FLAGS "-lcityhash -lboost_system -lboost_coroutine -lpthread -libverbs -lmemcached -lnuma")
+set(LINKS_FLAGS "-lcityhash -lboost_system -lboost_coroutine -lpthread -libverbs -lmemcached -lnuma -lcgroup")
 
 # option (SANITIZE "Turn on sanitization" ON)
 # if (SANITIZE)
