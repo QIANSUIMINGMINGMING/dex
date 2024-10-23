@@ -937,44 +937,20 @@ int main(int argc, char *argv[]) {
 
     // Set CPU quota to 50% of the default period
     // First, retrieve the default period
-    char *period_str = NULL;
-    ret = cgroup_get_value_string(cpu_ctrl, "cpu.cfs_period_us", &period_str);
+    int64_t period;
+    ret = cgroup_get_value_int64(cpu_ctrl, "cpu.cfs_period_us", &period);
     if (ret < 0) {
       fprintf(stderr, "Failed to get cpu.cfs_period_us: %s\n", strerror(-ret));
       cgroup_free(&cg);
       return EXIT_FAILURE;
     }
-
-    if (period_str == NULL) {
-      fprintf(stderr, "cpu.cfs_period_us returned NULL\n");
-      cgroup_free(&cg);
-      return EXIT_FAILURE;
-    }
-
-    if (period_str == NULL) {
-      fprintf(stderr, "cpu.cfs_period_us returned NULL\n");
-      cgroup_free(&cg);
-      return EXIT_FAILURE;
-    }
-
-    printf("Retrieved cpu.cfs_period_us: %s\n", period_str);
-
-    long period = atol(period_str);
-    free(period_str);
-    if (period <= 0) {
-      fprintf(stderr, "Invalid cpu.cfs_period_us value: %ld\n", period);
-      cgroup_free(&cg);
-      return EXIT_FAILURE;
-    }
     
-
     // Calculate 50% of the period
-    long quota = period / 2;
-    char quota_str[32];
-    snprintf(quota_str, sizeof(quota_str), "%ld", quota);
+    int64_t quota = period / 2;
+    std::cout << "quota " << quota << std::endl;
 
     // Set cpu.cfs_quota_us to 50% of the period
-    ret = cgroup_set_value_string(cpu_ctrl, "cpu.cfs_quota_us", quota_str);
+    ret = cgroup_set_value_int64(cpu_ctrl, "cpu.cfs_quota_us", quota);
     if (ret < 0) {
       fprintf(stderr, "Failed to set cpu.cfs_quota_us: %s\n", strerror(-ret));
       cgroup_free(&cg);
@@ -982,12 +958,11 @@ int main(int argc, char *argv[]) {
     }
 
     // Optionally, verify the settings
-    char* verify_quota = nullptr;
-    ret = cgroup_get_value_string(cpu_ctrl, "cpu.cfs_quota_us", &verify_quota);
+    int64_t verify_quota = 0;
+    ret = cgroup_get_value_int64(cpu_ctrl, "cpu.cfs_quota_us", &verify_quota);
     if (ret == 0) {
-      printf("Set cpu.cfs_quota_us to %s\n", verify_quota);
+      printf("Set cpu.cfs_quota_us to %ld\n", verify_quota);
     }
-
     // Attach the current process to the cgroup
     ret = cgroup_attach_task_pid(cg, getpid());
     if (ret < 0) {
