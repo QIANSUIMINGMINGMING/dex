@@ -36,6 +36,24 @@ void Directory::dirThread() {
   bindCore(39 - dirID);
   Debug::notifyInfo("dir %d launch!\n", dirID);
 
+  pid_t tid = syscall(SYS_gettid);
+
+  // 设置SCHED_DEADLINE属性
+  // 例如，设置runtime=50ms, deadline=100ms, period=100ms，实现50%的CPU限制
+  uint64_t runtime_ns = 50 * 1000000;    // 50ms
+  uint64_t deadline_ns = 100 * 1000000;  // 100ms
+  uint64_t period_ns = 100 * 1000000;    // 100ms
+
+  if (set_sched_deadline(tid, runtime_ns, deadline_ns, period_ns) != 0) {
+    std::cerr << "Failed to set SCHED_DEADLINE: " << strerror(errno)
+              << std::endl;
+    // 根据需要决定是否终止线程或采取其他措施
+    // exit(1);
+  } else {
+    std::cout << "SCHED_DEADLINE set successfully for thread " << tid
+              << std::endl;
+  }
+
   while (true) {
     struct ibv_wc wc;
     pollWithCQ(dCon->cq, 1, &wc);

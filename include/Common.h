@@ -89,6 +89,76 @@ struct CoroContext {
   int coro_id;
 };
 
+// for CPU utilization
+#define _GNU_SOURCE
+#include <errno.h>
+#include <pthread.h>
+#include <sched.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <cstring>
+#include <iostream>
+
+// 定义sched_attr结构
+struct sched_attr {
+  uint32_t size;
+
+  uint32_t sched_policy;
+  uint64_t sched_flags;
+
+  // SCHED_NORMAL, SCHED_BATCH
+  int32_t sched_nice;
+
+  // SCHED_FIFO, SCHED_RR
+  uint32_t sched_priority;
+
+  // SCHED_DEADLINE
+  uint64_t sched_runtime;
+  uint64_t sched_deadline;
+  uint64_t sched_period;
+};
+
+// 定义SCHED_DEADLINE的系统调用号
+#ifndef SYS_sched_setattr
+#if defined(__x86_64__)
+#define SYS_sched_setattr 314
+#define SYS_sched_getattr 315
+#elif defined(__i386__)
+#define SYS_sched_setattr 351
+#define SYS_sched_getattr 352
+#else
+#error "Unknown architecture"
+#endif
+#endif
+
+// 实现sched_setattr函数
+static int sched_setattr(pid_t pid, const struct sched_attr *attr,
+                         unsigned int flags) {
+  return syscall(SYS_sched_setattr, pid, attr, flags);
+}
+
+// 实现sched_getattr函数（可选，用于调试）
+static int sched_getattr(pid_t pid, struct sched_attr *attr, unsigned int size,
+                         unsigned int flags) {
+  return syscall(SYS_sched_getattr, pid, attr, size, flags);
+}
+
+int set_sched_deadline(pid_t pid, uint64_t runtime_ns, uint64_t deadline_ns,
+                       uint64_t period_ns) {
+  struct sched_attr attr;
+  memset(&attr, 0, sizeof(attr));
+  attr.size = sizeof(attr);
+  attr.sched_policy = SCHED_DEADLINE;
+  attr.sched_flags = 0;
+  attr.sched_runtime = runtime_ns;
+  attr.sched_deadline = deadline_ns;
+  attr.sched_period = period_ns;
+
+  return sched_setattr(pid, &attr, 0);
+}
+
 namespace define {
 
 constexpr uint64_t MB = 1024ull * 1024;
