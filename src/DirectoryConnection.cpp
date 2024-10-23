@@ -8,24 +8,7 @@ DirectoryConnection::DirectoryConnection(uint16_t dirID, void *dsmPool,
     : dirID(dirID), remoteInfo(remoteInfo) {
 
   createContext(&ctx);
-
-  dirCompChannel = ibv_create_comp_channel(ctx.ctx);
-  if (!dirCompChannel) {
-    perror("Failed to create completion channel");
-    assert(false);
-  }
-
-  cq = ibv_create_cq(ctx.ctx, RAW_RECV_CQ_COUNT, NULL, dirCompChannel, 0);
-
-  int ret = ibv_req_notify_cq(cq, 0);
-  if (ret) {
-    perror("Failed to request CQ notification");
-    assert(false);
-  }
-
-  printf("Main thread - dirCompChannel: %p, fd: %d\n",
-         (void *)dirCompChannel, dirCompChannel->fd);
-  printf("Main thread - cq: %p\n", (void *)cq);
+  cq = ibv_create_cq(ctx.ctx, RAW_RECV_CQ_COUNT, NULL, NULL, 0);
 
   message = new RawMessageConnection(ctx, cq, DIR_MESSAGE_NR);
 

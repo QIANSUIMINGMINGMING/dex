@@ -36,32 +36,7 @@ void Directory::dirThread() {
   bindCore(39 - dirID);
   Debug::notifyInfo("dir %d launch!\n", dirID);
 
-  printf("Event thread - dirCompChannel: %p, fd: %d\n",
-         (void *)dCon->dirCompChannel, dCon->dirCompChannel->fd);
-  printf("Event thread - cq: %p\n", (void *)dCon->cq);
-
   while (true) {
-    struct ibv_cq *ev_cq;
-    void *ev_ctx;
-    int ret;
-    int ne;
-    ret = ibv_get_cq_event(dCon->dirCompChannel, &ev_cq, &ev_ctx);
-    if (ret) {
-      perror("Failed to get CQ event");
-      fprintf(stderr, "Error number: %d\n", errno);
-      assert(false);
-    }
-
-    // Acknowledge the event
-    ibv_ack_cq_events(ev_cq, 1);
-
-    // Request notification for the next event
-    ret = ibv_req_notify_cq(ev_cq, 0);
-    if (ret) {
-      perror("Failed to request CQ notification");
-      assert(false);
-    }
-
     struct ibv_wc wc;
     pollWithCQ(dCon->cq, 1, &wc);
     switch (int(wc.opcode)) {
@@ -69,9 +44,7 @@ void Directory::dirThread() {
     {
       // printf("Dir receives a mesage\n");
       auto *m = (RawMessage *)dCon->message->getMessage();
-
       process_message(m);
-
       break;
     }
     case IBV_WC_RDMA_WRITE: {
