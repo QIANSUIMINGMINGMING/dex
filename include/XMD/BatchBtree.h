@@ -231,18 +231,22 @@ class BatchBTree {
     return true;
   }
 
-  void batch_insert() { assert(is_mine_); }
+  void batch_insert(KVTS* inputs) { 
+    assert(is_mine_);
+    phaseI(inputs);
+
+  }
 
   DSM *dsm_;
   // GlobalAddress root_;  // can be swizzled
   NodePage *super_root_;
   GlobalAddress root_ptr_ptr_;
   GlobalAddress root_ptr_;
+  static thread_local NodePage* tree_stack_[define::kMaxLevelOfTree];
 
   struct hash_value {
     std::atomic<int> KV_num;
     std::vector<KVTS *> kvtss;
-
     hash_value() { kvtss.reserve(100); }
   };
 
@@ -265,7 +269,10 @@ class BatchBTree {
 
   CacheManager cache_;
 
-  void phaseI() {}
+  void phaseI(KVTS *inputs) {}
+  void do_phaseI(const KVTS& input) {
+
+  }
   void phaseII() {}
   void phaseIII() {}
 

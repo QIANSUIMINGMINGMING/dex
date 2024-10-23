@@ -76,4 +76,15 @@ class MonotonicBufferRing {
   std::atomic<size_t> offset{0};
   std::atomic<cutil::ull_t> start_mutex;
 };
+
+// inline skiplist relevant
+constexpr int kMaxLevel = 8;
+constexpr int kMaxSkipListData = 65536;
+
+struct SkipListNode {
+  KVTS kvts;
+  uint16_t level;
+  uint16_t next_ptrs[kMaxLevel]; //ptrs are relative distance of the start of skiplistNode
+} __attribute__((packed));
 } // XMD
+
