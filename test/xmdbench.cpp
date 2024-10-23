@@ -945,9 +945,8 @@ int main(int argc, char *argv[]) {
       return EXIT_FAILURE;
     }
 
-    long period = atol(period_str);
-    if (period <= 0) {
-      fprintf(stderr, "Invalid cpu.cfs_period_us value: %s\n", period_str);
+    if (period_str == NULL) {
+      fprintf(stderr, "cpu.cfs_period_us returned NULL\n");
       cgroup_free(&cg);
       return EXIT_FAILURE;
     }
@@ -967,6 +966,7 @@ int main(int argc, char *argv[]) {
       cgroup_free(&cg);
       return EXIT_FAILURE;
     }
+    
 
     // Calculate 50% of the period
     long quota = period / 2;
