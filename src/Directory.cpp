@@ -38,7 +38,7 @@ void Directory::dirThread() {
 
   while (true) {
     struct ibv_wc wc;
-    pollWithCQ(dCon->cq, 1, &wc);
+    pollWithCQ(dCon->cq, 1, &wc);  //轮讯
     switch (int(wc.opcode)) {
     case IBV_WC_RECV: // control message
     {
