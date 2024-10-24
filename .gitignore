@@ -3,3 +3,4 @@ build
 *.lat
 *.ipynb
 .VSCodeCounter
+*.png
