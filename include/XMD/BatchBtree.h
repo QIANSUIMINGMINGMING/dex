@@ -27,7 +27,7 @@ namespace XMD {
 //     sizeof(Value);
 
 constexpr int kLeafCardinality = kInternalCardinality;
-constexpr int one_batch_nodes = 256;
+constexpr int one_batch_nodes = 64;
 
 // For bulkloading
 

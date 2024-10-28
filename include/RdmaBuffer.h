@@ -14,7 +14,7 @@ private:
   static const int kSiblingBufferCnt = 8; // async, buffer safty
   static const int kCasBufferCnt = 256;   // async, buffer safty
 
-  static const int kBatchPageBufferCnt = 256; // For Batch
+  static const int kBatchPageBufferCnt = 64; // For Batch
 
   // For SMART
   static const int kSmartPageBufferCnt =
