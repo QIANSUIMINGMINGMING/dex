@@ -940,7 +940,7 @@ int main(int argc, char *argv[]) {
       tree->start_batch_insert();
 
       // thread_run(0);
-      for (int i = 0; i < kThreadCount - 1; i++) {
+      for (int i = 0; i < kThreadCount; i++) {
         ths[i] = std::thread(thread_run, i);
       }
 
@@ -1087,7 +1087,7 @@ int main(int argc, char *argv[]) {
         sleep(2);
       }
 
-      for (int i = 0; i < kThreadCount -1 ; i++) {
+      for (int i = 0; i < kThreadCount ; i++) {
         ths[i].join();
       }
 
