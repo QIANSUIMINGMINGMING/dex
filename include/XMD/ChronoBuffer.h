@@ -9,7 +9,6 @@
 
 #include "Common.h"
 
-
 namespace XMD {
 template <typename T>
 class MonotonicBufferRing {
@@ -79,12 +78,12 @@ class MonotonicBufferRing {
 
 // inline skiplist relevant
 constexpr int kMaxLevel = 8;
-constexpr int kMaxSkipListData = 65536;
-
+constexpr int kMaxSkipListData = (1 << 16) - 1;
+ 
 struct SkipListNode {
   KVTS kvts;
   uint16_t level;
-  uint16_t next_ptrs[kMaxLevel]; //ptrs are relative distance of the start of skiplistNode
+  uint16_t next_ptrs[kMaxLevel];  // ptrs are relative distance of the start of
+                                  // skiplistNode
 } __attribute__((packed));
-} // XMD
-
+}  // namespace XMD

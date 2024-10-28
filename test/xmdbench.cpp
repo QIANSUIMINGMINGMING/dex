@@ -188,7 +188,7 @@ void generate_index() {
 
     case 3:  // XMD
     {
-      tree = new BatchForest<Key, Value>(dsm, cache_mb, rpc_rate, admission_rate);
+      tree = new BatchForest<Key, Value>(dsm, cache_mb, cache_mb, rpc_rate, admission_rate);
       break;
     }
   }
@@ -933,6 +933,8 @@ int main(int argc, char *argv[]) {
       // thread_run(0);
       std::thread ths[MAX_APP_THREAD];
 
+      tree->start_batch_insert();
+
       // thread_run(0);
       for (int i = 0; i < kThreadCount; i++) {
         ths[i] = std::thread(thread_run, i);
@@ -1084,6 +1086,8 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < kThreadCount; i++) {
         ths[i].join();
       }
+
+      tree->stop_batch_insert();
 
       // for (int i = 0; i < kThreadCount; ++i) {
       //   total_max_time = std::max_element(total_time, total_time + k)

@@ -1,3 +1,4 @@
+#include <city.h>
 #include <immintrin.h>
 #include <sched.h>
 
@@ -261,6 +262,118 @@ class NodePage {
       v = values[pos];
     }
     return success;
+  }
+
+  // -1 for false
+  // 0 for no split
+  // > 0 for split
+  int updateNode(std::vector<KVTS*>& kvtss, std::vector<NodePage*>& newNodes) {
+    // Step 1: Sort kvtss by key; for same key, keep the one with the latest
+    // timestamp
+    std::sort(kvtss.begin(), kvtss.end(), [](const KVTS* a, const KVTS* b) {
+      if (a->k != b->k) return a->k < b->k;
+      return a->ts > b->ts;  // Latest timestamp first for same key
+    });
+
+    // Step 2: Remove duplicates in kvtss, keeping only the entry with the
+    // latest timestamp
+    auto last =
+        std::unique(kvtss.begin(), kvtss.end(),
+                    [](const KVTS* a, const KVTS* b) { return a->k == b->k; });
+    kvtss.erase(last, kvtss.end());
+
+    // Step 3: Merge kvtss into keys and values arrays
+    std::vector<Key> mergedKeys;
+    std::vector<Value> mergedValues;
+    int updatedKeys = 0;  // Count of updated keys
+
+    int i = 0;  // Index for existing keys[]
+    int j = 0;  // Index for kvtss[]
+
+    while (i < header.count || j < static_cast<int>(kvtss.size())) {
+      if (i >= header.count) {
+        // No more existing keys; insert remaining kvtss entries
+        mergedKeys.push_back(kvtss[j]->k);
+        mergedValues.push_back(kvtss[j]->v);
+        ++j;
+      } else if (j >= static_cast<int>(kvtss.size())) {
+        // No more kvtss entries; keep remaining existing keys
+        mergedKeys.push_back(keys[i]);
+        mergedValues.push_back(values[i]);
+        ++i;
+      } else if (keys[i] < kvtss[j]->k) {
+        // Existing key is less; keep it
+        mergedKeys.push_back(keys[i]);
+        mergedValues.push_back(values[i]);
+        ++i;
+      } else if (keys[i] > kvtss[j]->k) {
+        // New key is less; insert it
+        mergedKeys.push_back(kvtss[j]->k);
+        mergedValues.push_back(kvtss[j]->v);
+        ++j;
+      } else {
+        // Keys are equal; update the value
+        mergedKeys.push_back(keys[i]);
+        mergedValues.push_back(kvtss[j]->v);  // Use the value from kvtss
+        ++i;
+        ++j;
+        ++updatedKeys;
+      }
+    }
+
+    int totalKeys = mergedKeys.size();
+    int newNodesCount = newNodes.size();
+
+    // Step 4: Handle splitting if totalKeys exceeds kInternalCardinality
+    if (totalKeys <= kInternalCardinality) {
+      // No splitting needed; copy back to original arrays
+      for (int idx = 0; idx < totalKeys; ++idx) {
+        keys[idx] = mergedKeys[idx];
+        values[idx] = mergedValues[idx];
+      }
+      header.count = totalKeys;
+    } else {
+      // Splitting required
+      int minKeysPerNode =
+          std::ceil(static_cast<double>(kInternalCardinality) / 2);
+      int numNodes =
+          std::ceil(static_cast<double>(totalKeys) / kInternalCardinality);
+
+      // Ensure each node has at least minKeysPerNode keys
+      int keysPerNode =
+          std::max(minKeysPerNode,
+                   (int)std::ceil(static_cast<double>(totalKeys) / numNodes));
+      int startIdx = 0;
+
+      // Update the current node with the first segment
+      header.count = std::min(keysPerNode, totalKeys - startIdx);
+      for (int idx = 0; idx < header.count; ++idx) {
+        keys[idx] = mergedKeys[startIdx + idx];
+        values[idx] = mergedValues[startIdx + idx];
+      }
+      startIdx += header.count;
+      uint64_t pre_max_limit = header.max_limit_;
+      header.max_limit_ = mergedKeys[startIdx];
+
+      // Create new nodes for the remaining segments
+      while (startIdx < totalKeys) {
+        NodePage* newNode = new NodePage(header.level, GlobalAddress::Null());
+        int nodeKeys = std::min(keysPerNode, totalKeys - startIdx);
+        for (int idx = 0; idx < nodeKeys; ++idx) {
+          newNode->keys[idx] = mergedKeys[startIdx + idx];
+          newNode->values[idx] = mergedValues[startIdx + idx];
+        }
+        newNode->header.count = nodeKeys;
+        newNode->parent_ptr = parent_ptr;
+        startIdx += nodeKeys;
+        newNode->header.min_limit_ = newNode->keys[0];
+        newNode->header.max_limit_ =
+            startIdx < totalKeys ? mergedKeys[startIdx] : pre_max_limit;
+        newNodes.push_back(newNode);
+      }
+    }
+    // Step 5: Return the number of new nodes that were updated
+    return newNodes.size() - newNodesCount;
   }
 };
 

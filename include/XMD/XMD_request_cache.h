@@ -7,6 +7,58 @@
 #include <shared_mutex>
 #include <thread>
 
+#include "ChronoSkipList.h"
+
+namespace XMD {
+
+constexpr uint64_t kIntervalNumber = 1024;
+constexpr uint64_t kIntervalSize = 1 << 16 - 1;
+
+class KVCache {
+ public:
+  MonotonicBufferRing<SkipListNode> chronoBuffer_;
+  SkipList *skiplists[kIntervalNumber];
+  // std::shared_mutex skiplists_mutex_[kIntervalNumber];
+  uint64_t cur_latest = 0;
+  uint64_t cur_oldest = 0;
+
+  KVCache(uint64_t size) : chronoBuffer_(size) {
+    for (uint64_t i =0; i < kIntervalNumber; i++) {
+        skiplists[i] = new SkipList(&chronoBuffer_);
+    }
+    skiplists[cur_latest]->init_skiplist();
+  }
+
+  void insert(const KVTS &kvts) {
+    SkipList *insert_skiplist = skiplists[cur_latest];
+    if (!insert_skiplist->not_full()) {
+      cur_latest = RING_ADD(cur_latest, 1, kIntervalNumber);
+      insert_skiplist = skiplists[cur_latest];
+      insert_skiplist->init_skiplist();
+    }
+    insert_skiplist->insert(kvts);
+  }
+
+  void search() {
+    // TODO
+  }
+
+  void update_oldest() {
+    skiplists[cur_oldest]->reset_skiplist();
+    cur_oldest = RING_ADD(cur_oldest, 1, kIntervalNumber);
+  }
+
+  SkipList *get_oldest() {
+    SkipList *oldest_skiplist = skiplists[cur_oldest];
+    while (RING_SUB(cur_latest, cur_oldest, kIntervalNumber) < 10) {
+      sched_yield();
+    }
+    return oldest_skiplist;
+  }
+};
+
+}  // namespace XMD
+
 // #include "Common.h"
 // #include "FilterPool.h"
 // #include "bloomfilter/pbf.h"

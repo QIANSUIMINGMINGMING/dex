@@ -1,14 +1,16 @@
 #pragma once
 
 #include "BatchBtree.h"
+#include "XMD_request_cache.h"
 #include "mc_agent.h"
 
 template <class T, class P>
 class BatchForest : public tree_api<T, P> {
  public:
-  BatchForest(DSM *dsm, uint64_t cache_mb, double sample, double admmision) {
+  BatchForest(DSM *dsm, uint64_t cache_mb, uint64_t request_mb, double sample,
+              double admmision)
+      : my_dsm(dsm), request_cache_(request_mb * 1024 * 1024 / XMD::kPageSize) {
     std::cout << "creating XMD" << std::endl;
-    my_dsm = dsm;
     for (int i = 0; i < dsm->getComputeNum(); i++) {
       btrees[i] = new XMD::BatchBTree(dsm, i, cache_mb, sample, admmision);
     }
@@ -34,7 +36,36 @@ class BatchForest : public tree_api<T, P> {
     return shard_tree->search(key, value);
   }
 
-  bool update(T key, P value) { return true; }
+  bool update(T key, P value) {
+    XMD::KVTS kvts[my_dsm->getComputeNum()];
+    for (int i = 0; i < my_dsm->getComputeNum(); i++) {
+      kvts[i] = XMD::KVTS{key + i, value, XMD::myClock::get_ts()};
+    }
+
+    std::lock_guard<std::mutex> lock(request_cache_mutex_);
+
+    for (int i = 0; i < my_dsm->getComputeNum(); i++) {
+      request_cache_.insert(kvts[i]);
+    }
+
+    return true;
+  }
+
+  static void batch_insert_thread_run(XMD::BatchBTree *bbt, BatchForest *bf) {
+    bf->my_dsm->registerThread();
+
+    while (true) {
+      XMD::SkipList *cur_oldest = bf->request_cache_.get_oldest();
+      bbt->batch_insert(cur_oldest);
+      bf->request_cache_.update_oldest();
+    }
+  }
+
+  void start_batch_insert() {
+    batch_insert_thread = std::thread(batch_insert_thread_run, btrees[my_dsm->getMyNodeID()], this);
+  }
+
+  void stop_batch_insert() { batch_insert_thread.join(); }
 
   bool remove(T key) { return true; }
 
@@ -65,115 +96,30 @@ class BatchForest : public tree_api<T, P> {
 
     std::cout << "my_tree node num: " << my_tree->bulk_load_node_num
               << std::endl;
-            // ga_for_bulk = my_dsm->alloc(XMD::kPageSize *
-            // my_tree->bulk_load_node_num);
+    // ga_for_bulk = my_dsm->alloc(XMD::kPageSize *
+    // my_tree->bulk_load_node_num);
 
-        //     std::cout
-        // << "allocated ga" << ga_for_bulk << std::endl;
+    //     std::cout
+    // << "allocated ga" << ga_for_bulk << std::endl;
     my_tree->bulk_loading();
-
-
-
-    // test
-    // for (int i = 0; i < 10; i++) {
-    //   XMD::BTreeNode *test_node = XMD::BTreeNode::first_ten[i];
-    //   std::cout << "node id" << i << std::endl;
-    //   for (int j = 0; j < test_node->numKeys; j++) {
-    //     std::cout << test_node->keys[j] << " ";
-    //   }
-    //   std::cout << std::endl;
-
-    //   GlobalAddress remote_addr;
-    //   remote_addr.nodeID = ga_for_bulk.nodeID;
-    //   remote_addr.offset = ga_for_bulk.offset + i * XMD::kPageSize;
-    //   auto remote_page_buffer = my_dsm->get_rbuf(0).get_page_buffer();
-    //   XMD::NodePage *remote_page_ptr;
-    //   bool retry = true;
-    //   while (retry) {
-    //     my_dsm->read_sync(remote_page_buffer, remote_addr, XMD::kPageSize);
-    //     remote_page_ptr = reinterpret_cast<XMD::NodePage
-    //     *>(remote_page_buffer);
-    //     // retry = false;
-    //     retry = !(remote_page_ptr->check_consistent());
-    //     std::cout << "Retry read page" << std::endl;
-    //   }
-    //   std::cout << "remote results ";
-    //   for (int j = 0; j < test_node->numKeys; j++) {
-    //     std::cout << remote_page_ptr->keys[j] << " ";
-    //   }
-    //   std::cout << std::endl;
-    // }
-
     my_dsm->barrier("set-roots2", my_dsm->getComputeNum());
 
     for (int i = 0; i < my_dsm->getComputeNum(); i++) {
       btrees[i]->first_get_new_root_ptr();
       btrees[i]->single_thread_load_newest_root();
     }
-
-    // set root
-
-    // Value v;
-
-    // lookup(1, v);
-
-    // std::cout << "value of 1" << v << std::endl;
-    // lookup(20000, v);
-    // std::cout << "value of 2" << v << std::endl;
-    // lookup(3000000, v);
-    // std::cout << "value of 3" << v << std::endl;
-
-    // while (true) {}
-    // uint32_t compute_num = my_dsm->getComputeNum();
-    // if (node_id >= compute_num) {
-    //   return;
-    // }
-    // partition_info *all_partition = new partition_info[bulk_threads];
-    // uint64_t each_partition = bulk_load_num / bulk_threads;
-
-    // for (uint64_t i = 0; i < bulk_threads; ++i) {
-    //   all_partition[i].id = i;
-    //   all_partition[i].array =
-    //       bulk_array + (all_partition[i].id * each_partition);
-    //   all_partition[i].num = each_partition;
-    // }
-    // all_partition[bulk_threads - 1].num =
-    //       bulk_load_num - (each_partition * (bulk_threads - 1));
-
-    // auto bulk_thread = [&](void *bulk_info) {
-    //   auto my_parition = reinterpret_cast<partition_info *>(bulk_info);
-    //   // bindCore(my_parition->id);
-    //   bindCore((my_parition->id % bulk_threads) * 2);
-    //   my_dsm->registerThread();
-    //   auto num = my_parition->num;
-    //   auto array = my_parition->array;
-
-    //   for (uint64_t i = 0; i < num; ++i) {
-    //     T k = array[i];
-    //     P v = array[i] + 1;
-    //     if ((k % compute_num) == node_id)
-    //     btrees[node_id]->bulk_load_insert_single(k, v);
-    //   }
-    // };
-
-    // for (uint64_t i = 0; i < bulk_threads; i++) {
-    //   th[i] =
-    //       std::thread(bulk_thread, reinterpret_cast<void *>(all_partition +
-    //       i));
-    // }
-
-    // for (uint64_t i = 0; i < bulk_threads; i++) {
-    //   th[i].join();
-    // }
   }
 
-  // void reset_buffer_pool(bool flush_dirty) { 
-  //   cache.reset(flush_dirty); 
+  // void reset_buffer_pool(bool flush_dirty) {
+  //   cache.reset(flush_dirty);
   // }
 
   XMD::BatchBTree *btrees[MAX_MACHINE];
+  XMD::KVCache request_cache_;
+  std::mutex request_cache_mutex_;
+  std::thread batch_insert_thread;
 
-  DSM *my_dsm; 
+  DSM *my_dsm;
   // Do most initialization work here
   tree_api<T, P> *create_tree() { return nullptr; }
 };

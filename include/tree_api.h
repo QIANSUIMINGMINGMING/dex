@@ -26,6 +26,8 @@ public:
   virtual void get_basic() {}
   virtual void get_newest_root() {}
   virtual void set_bound(T left, T right) {}
+  virtual void start_batch_insert() {}
+  virtual void stop_batch_insert() {}
 
   virtual void validate() {}
 

@@ -1,31 +1,38 @@
 #include "ChronoBuffer.h"
-namespace XMD
-{
+namespace XMD {
 class SkipList {
  public:
-  SkipList(MonotonicBufferRing<SkipListNode>* allocator,
-           uint64_t first_offset) {
+  SkipList(MonotonicBufferRing<SkipListNode>* allocator)
+      : allocator_(allocator) {}
+
+  void init_skiplist() {
     // Initialize random seed
     std::srand(static_cast<unsigned>(std::time(nullptr)));
-    SkipListNode* head_node = allocator->alloc(head_offset);
+    SkipListNode* head_node = allocator_->alloc(head_offset);
     head_node->level = kMaxLevel;
     std::memset(head_node->next_ptrs, 0, sizeof(head_node->next_ptrs));
   }
 
-  void insert(const KVTS &kvts) {
+  bool not_full() {
+    return cur_num < kMaxSkipListData;
+  }
+
+  void insert(const KVTS& kvts) {
+    cur_num +=1;
     uint16_t update[kMaxLevel]{0};
     uint16_t current_offset = 0;
-
     // Find positions to update
     for (int level = kMaxLevel - 1; level >= 0; --level) {
       while (true) {
-        SkipListNode& current_node = allocator->operator[](current_offset + head_offset);
+        SkipListNode& current_node =
+            allocator_->operator[](current_offset + head_offset);
         uint16_t relative_next = current_node.next_ptrs[level];
         if (relative_next == 0) break;
 
-        SkipListNode& next_node = allocator->operator[](relative_next + head_offset);
+        SkipListNode& next_node =
+            allocator_->operator[](relative_next + head_offset);
 
-        if (next_node.kvts.k < kvts.k) {
+        if (next_node.kvts < kvts) {
           current_offset = relative_next;
         } else {
           break;
@@ -39,8 +46,10 @@ class SkipList {
 
     // Allocate new node
     size_t new_offset_size_t;
-    SkipListNode* new_node = allocator->alloc(new_offset_size_t);
-    uint16_t new_offset = static_cast<uint16_t>(new_offset_size_t - head_offset);
+    SkipListNode* new_node = allocator_->alloc(new_offset_size_t);
+    uint64_t new_offset;
+    allocator_->check_distance(head_offset, new_offset);
+    uint16_t bit16relative = static_cast<uint16_t>(new_offset);
 
     new_node->kvts = kvts;
     new_node->level = node_level;
@@ -49,7 +58,8 @@ class SkipList {
     // Update pointers
     for (int i = 0; i < node_level; ++i) {
       uint16_t prev_offset = update[i];
-      SkipListNode& prev_node = allocator->operator[](head_offset + prev_offset);
+      SkipListNode& prev_node =
+          allocator_->operator[](head_offset + prev_offset);
 
       uint16_t relative_next = prev_node.next_ptrs[i];
 
@@ -59,34 +69,52 @@ class SkipList {
   }
 
   bool find(const Key& key, Value& value_out) {
-    uint16_t current_offset = head_offset;
-
+    uint16_t current_offset = 0;
+    value_out = kValueNull;
     for (int level = kMaxLevel - 1; level >= 0; --level) {
       while (true) {
-        SkipListNode<Key, Value>& current_node = allocator[current_offset];
+        SkipListNode& current_node =
+            allocator_->operator[](head_offset + current_offset);
         uint16_t relative_next = current_node.next_ptrs[level];
 
         if (relative_next == 0) break;
+        SkipListNode& next_node =
+            allocator_->operator[](head_offset + relative_next);
 
-        uint16_t next_offset = current_offset + relative_next;
-        SkipListNode<Key, Value>& next_node = allocator[next_offset];
-
-        if (next_node.kvts.key == key) {
-          value_out = next_node.kvts.value;
-          return true;
-        } else if (next_node.kvts.key < key) {
-          current_offset = next_offset;
+        if (next_node.kvts.k < key) {
+          current_offset = relative_next;
+        } else if (next_node.kvts.k == key) {
+          value_out = next_node.kvts.v;
+          current_offset = relative_next;
         } else {
           break;
         }
       }
     }
+    if (value_out != kValueNull) {
+      return true;
+    }
     return false;
+  }
+
+  void reset_skiplist() {
+    head_offset = 0;
+    cur_num = 0;
+  }
+
+  SkipListNode *getNext(SkipListNode * last) {
+    uint16_t next_relative = last->next_ptrs[0];
+    return &allocator_->operator[](head_offset + next_relative);
+  }
+
+  SkipListNode *getHead() {
+    return &allocator_->operator[](head_offset);
   }
 
  private:
   uint64_t head_offset;
-  MonotonicBufferRing<SkipListNode> * allocator;
+  int cur_num = 0;
+  MonotonicBufferRing<SkipListNode>* allocator_;
 
   int randomLevel() {
     int level = 1;
@@ -96,5 +124,5 @@ class SkipList {
     return level;
   }
 };
-} // namespace XMD
+}  // namespace XMD
 

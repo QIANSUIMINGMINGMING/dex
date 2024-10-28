@@ -14,6 +14,8 @@ private:
   static const int kSiblingBufferCnt = 8; // async, buffer safty
   static const int kCasBufferCnt = 256;   // async, buffer safty
 
+  static const int kBatchPageBufferCnt = 256; // For Batch
+
   // For SMART
   static const int kSmartPageBufferCnt =
       256; // big enough to hold batch internal node write in
@@ -32,6 +34,7 @@ private:
   // char *entry_buffer;
 
   uint64_t *cas_buffer;
+  char *batch_page_buffer;
   char *page_buffer;
   char *sibling_buffer;
   char *smart_page_buffer;
@@ -73,7 +76,9 @@ public:
     // cas_buffer = (uint64_t *)buffer;
     unlock_buffer =
         (uint64_t *)((char *)cas_buffer + sizeof(uint64_t) * kCasBufferCnt);
-    zero_64bit = (uint64_t *)((char *)unlock_buffer + sizeof(uint64_t));
+    batch_page_buffer = (char *)((char *)unlock_buffer + sizeof(uint64_t));
+    zero_64bit = (uint64_t *)((char *)batch_page_buffer + kBatchPageBufferCnt*kPageSize);
+    // zero_64bit = (uint64_t *)((char *)unlock_buffer + sizeof(uint64_t));
     entry_buffer =
         reinterpret_cast<uint64_t *>((char *)zero_64bit + sizeof(int64_t));
     *zero_64bit = 0;
@@ -118,6 +123,10 @@ public:
   char *get_sibling_buffer() {
     sibling_buffer_cur = (sibling_buffer_cur + 1) % kSiblingBufferCnt;
     return sibling_buffer + (sibling_buffer_cur * kPageSize);
+  }
+
+  char *get_batch_page_buffer() {
+    return batch_page_buffer;
   }
 
   // uint64_t *get_entry_buffer() const { return entry_buffer; }

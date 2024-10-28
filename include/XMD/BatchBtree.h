@@ -10,6 +10,7 @@
 #include <thread>
 
 #include "XMD_index_cache.h"
+#include "XMD_request_cache.h"
 
 namespace XMD {
 
@@ -26,6 +27,7 @@ namespace XMD {
 //     sizeof(Value);
 
 constexpr int kLeafCardinality = kInternalCardinality;
+constexpr int one_batch_nodes = 256;
 
 // For bulkloading
 
@@ -60,6 +62,7 @@ class BatchBTree {
     super_root_->header.pos_state = 2;
     dsm_ = dsm;
     tree_id_ = tree_id;
+    cnode_num_ = dsm->getComputeNum();
     is_mine_ = dsm_->getMyNodeID() == tree_id ? true : false;
     root_ptr_ptr_ = get_root_ptr_ptr();
     bulk_load_tree_ = new BTree(keyNum / 2 + 1);
@@ -231,10 +234,11 @@ class BatchBTree {
     return true;
   }
 
-  void batch_insert(KVTS* inputs) { 
+  void batch_insert(SkipList *skiplist) {
     assert(is_mine_);
-    phaseI(inputs);
-
+    phaseI(skiplist);
+    phaseII();
+    phaseIII();
   }
 
   DSM *dsm_;
@@ -242,22 +246,30 @@ class BatchBTree {
   NodePage *super_root_;
   GlobalAddress root_ptr_ptr_;
   GlobalAddress root_ptr_;
-  static thread_local NodePage* tree_stack_[define::kMaxLevelOfTree];
 
   struct hash_value {
-    std::atomic<int> KV_num;
+    std::mutex mtx;
     std::vector<KVTS *> kvtss;
-    hash_value() { kvtss.reserve(100); }
+    hash_value() {}
+    void insert(KVTS *kvts) {
+      mtx.lock();
+      kvtss.push_back(kvts);
+      mtx.unlock();
+    }
   };
 
   struct meta_value {
-    std::atomic<int> kids;
+    std::atomic<int> kids{0};
     GlobalAddress parent_remote_addr;
     int idx_in_parent;
   };
 
-  // libcuckoo::cuckoohash_map<GlobalAddress, hash_value*> nodeUpdatingTable;
-  // libcuckoo::cuckoohash_map<GlobalAddress, meta_value*> TreeMetatable;
+  // local memory
+  libcuckoo::cuckoohash_map<NodePage *, hash_value *> nodeUpdatingTable;
+
+  libcuckoo::cuckoohash_map<NodePage *, hash_value *> innerNodeUpdatingTable;
+  // remote memory
+  libcuckoo::cuckoohash_map<uint64_t, meta_value *> TreeMetatable;
 
   int height_ = 0;
 
@@ -265,16 +277,270 @@ class BatchBTree {
   int bulk_load_node_num = 0;
 
   uint64_t tree_id_;
+  uint64_t cnode_num_;
   bool is_mine_;
 
   CacheManager cache_;
 
-  void phaseI(KVTS *inputs) {}
-  void do_phaseI(const KVTS& input) {
+  bool partial_search(Key k, NodePage *&result) {
+    int restartCount = 0;
+  restart:
+    if (restartCount++) yield(restartCount);
+    NodePage *parent = super_root_;
+    bool needRestart = false;
+    bool refresh = false;
+    uint64_t versionParent = super_root_->readLockOrRestart(needRestart);
+    if (needRestart) goto restart;
 
+    NodePage *cur_node = cache_.search_in_cache(root_ptr_);
+    if (cur_node == nullptr) {
+      assert(false);
+      // Load newest root
+      load_newest_root(versionParent, needRestart);
+      goto restart;
+    }
+    uint64_t versionNode = cur_node->readLockOrRestart(needRestart);
+    if (needRestart) {
+      goto restart;
+    }
+
+    while (!cur_node->is_leaf) {
+      auto inner = cur_node;
+      parent->readUnlockOrRestart(versionParent, needRestart);
+      if (needRestart) {
+        goto restart;
+      }
+
+      parent = inner;
+      versionParent = versionNode;
+      // Got the next child to go
+      auto idx = inner->lowerBound(k);
+      assert(idx != -1);
+      GlobalAddress inner_child_ga;
+      if (idx == LeftMostIdx) {
+        cur_node = new_get_mem_node(inner->left_ptr, inner, idx, versionNode,
+                                    needRestart, refresh, false);
+        inner_child_ga = inner->left_ptr;
+      } else {
+        cur_node = new_get_mem_node(
+            *(reinterpret_cast<GlobalAddress *>(&inner->values[idx])), inner,
+            idx, versionNode, needRestart, refresh, false);
+
+        inner_child_ga.val = inner->values[idx];
+      }
+
+      if (inner_child_ga.val == 0) {
+        printNodePage(*inner);
+        assert(false);
+      }
+
+      if (needRestart) {
+        if (refresh) {
+          assert(false);
+          new_refresh_from_root(k);
+        }
+        goto restart;
+      }
+
+      // IO flag has been inserted into the page table
+      // But the operation is not finished
+      if (cur_node == nullptr) {
+        if (inner->header.level == 1) {
+        } else {
+          int remote_flag = 0;
+
+          remote_flag = cache_.cold_to_hot(inner_child_ga,
+                                           reinterpret_cast<void **>(&cur_node),
+                                           inner, idx, refresh);
+
+          // Admission succeed
+          if (remote_flag == 0) {
+            assert(cur_node != nullptr);
+            if (idx == LeftMostIdx) {
+              new_swizzling(inner->left_ptr, inner, idx, cur_node);
+            } else {
+              new_swizzling(
+                  *(reinterpret_cast<GlobalAddress *>(&inner->values[idx])),
+                  inner, idx, cur_node);
+            }
+            cur_node->header.pos_state = 4;
+            cur_node->writeUnlock();
+            inner->IOUnlock();
+          } else {
+            inner->IOUnlock();
+            if (refresh) {
+              assert(false);
+              new_refresh_from_root(k);
+            }
+            goto restart;
+          }
+        }
+      }
+
+      // Get the version of next node
+      versionNode = cur_node->readLockOrRestart(needRestart);
+      if (needRestart) goto restart;
+
+      // printNodePage(*cur_node);
+    }
+
+    // Access the leaf node
+    NodePage *leaf = cur_node;
+    if (!leaf->header.rangeValid(k)) {
+      assert(false);
+      new_refresh_from_root(k);
+      goto restart;
+    }
+
+    result = leaf;
+
+    if (parent) {
+      parent->readUnlockOrRestart(versionParent, needRestart);
+      if (needRestart) {
+        goto restart;
+      }
+    }
+
+    cur_node->readUnlockOrRestart(versionNode, needRestart);
+    if (needRestart) {
+      goto restart;
+    }
+    return true;
   }
-  void phaseII() {}
-  void phaseIII() {}
+
+  void phaseI(SkipList *skpl) {
+    SkipListNode *cur = skpl->getHead();
+    NodePage *cur_leaf = nullptr;
+    hash_value *next_hash = new hash_value();
+    hash_value *cur_hash = nullptr;
+    for (uint64_t i = 0; i < kIntervalSize; i++) {
+      cur = skpl->getNext(cur);
+      KVTS &cur_kvts = cur->kvts;
+      Key cur_k = cur_kvts.k;
+      if (cur_kvts.k % cnode_num_ == tree_id_) {
+        if (cur_leaf == nullptr || (cur_leaf->header.min_limit_ > cur_k &&
+                                    cur_leaf->header.max_limit_ <= cur_k)) {
+          partial_search(cur_k, cur_leaf);
+          assert(cur_leaf->is_leaf);
+          if (!nodeUpdatingTable.contains(cur_leaf)) {
+            nodeUpdatingTable.insert(cur_leaf, next_hash);
+            next_hash->insert(&cur_kvts);
+            cur_hash = next_hash;
+            next_hash = new hash_value();
+          } else {
+            hash_value *hv = nodeUpdatingTable.find(cur_leaf);
+            hv->insert(&cur_kvts);
+            cur_hash = hv;
+          }
+        } else {
+          cur_hash->insert(&cur_kvts);
+        }
+      }
+    }
+  }
+
+  void leaf_to_remote(
+      std::vector<NodePage *> splitted_siblings) {
+    int total_idx = 0;
+    int next_batch_num = splitted_siblings.size() > one_batch_nodes
+                             ? one_batch_nodes
+                             : splitted_siblings.size();
+    GlobalAddress next_batch_addr;
+    if (next_batch_num > 0) {
+      next_batch_addr = dsm_->alloc(next_batch_num * kPageSize);
+    }
+    while (total_idx < splitted_siblings.size()) {
+      int cur_batch_num = next_batch_num;
+      auto batch_buffer = dsm_->get_rbuf(0).get_batch_page_buffer();
+      for (int i = 0; i < cur_batch_num; i++) {
+        NodePage *cur_leaf = splitted_siblings[total_idx + i];
+        GlobalAddress cur_remote_addr = next_batch_addr + i * kPageSize;
+        cur_leaf->header.remote_address = cur_remote_addr;
+        cur_leaf->set_consistent();
+        memcpy(batch_buffer + i * kPageSize, cur_leaf, kPageSize);
+      }
+      dsm_->write_sync(batch_buffer, next_batch_addr, cur_batch_num * kPageSize);
+      total_idx += cur_batch_num;
+    }
+
+    // update original leaf node
+    auto lt = nodeUpdatingTable.lock_table();
+    for (const auto &it : lt) {
+      NodePage *cur_leaf = it.first;
+      cur_leaf->set_consistent();
+      GlobalAddress cur_leaf_addr = cur_leaf->header.remote_address;
+      auto dsm_buffer = dsm_->get_rbuf(0).get_page_buffer();
+      memcpy(dsm_buffer, cur_leaf, kPageSize);
+      dsm_->write_sync(dsm_buffer, cur_leaf_addr, kPageSize);
+      cur_leaf->header.pos_state = 2;
+    }
+    lt.unlock();
+    nodeUpdatingTable.clear();
+  }
+
+  void phaseII() {
+    auto lt = nodeUpdatingTable.lock_table();
+    std::vector<NodePage *> new_page_nodes;
+    for (const auto &it : lt) {
+      NodePage *cur_leaf = it.first;
+      hash_value *hv = it.second;
+      if (hv->kvtss.size() == 0) {
+        assert(false);
+      }
+      bool needRestart = false;
+      cur_leaf->header.writeLockOrRestart(needRestart);
+      if (needRestart) {
+        assert(false);
+      }
+      cur_leaf->updateNode(hv->kvtss, new_page_nodes);
+      cur_leaf->header.writeUnlock();
+    }
+    lt.unlock();
+
+    leaf_to_remote(new_page_nodes);
+    nodeUpdatingTable.clear();
+
+    NodePage *parent = nullptr;
+    for (auto &node : new_page_nodes) {
+      parent = node->parent_ptr;
+      if (innerNodeUpdatingTable.contains(parent)) {
+        hash_value *hv = innerNodeUpdatingTable.find(parent);
+        hv->mtx.lock();
+        hv->kvtss.push_back(
+            new KVTS(node->keys[0], node->header.remote_address, 0));
+        hv->mtx.unlock();
+      } else {
+        hash_value *hv = new hash_value();
+        hv->kvtss.push_back(
+            new KVTS(node->keys[0], node->header.remote_address, 0));
+        innerNodeUpdatingTable.insert(parent, hv);
+      }
+    }
+  }
+
+  void phaseIII() {
+    //TODO
+    // auto lt = innerNodeUpdatingTable.lock_table();
+    // std::vector<NodePage *> new_page_nodes;
+    // for (const auto &it : lt) {
+    //   NodePage *cur_inner = it.first;
+    //   hash_value *hv = it.second;
+    //   if (hv->kvtss.size() == 0) {
+    //     assert(false);
+    //   }
+    //   bool needRestart = false;
+    //   cur_inner->header.writeLockOrRestart(needRestart);
+    //   if (needRestart) {
+    //     assert(false);
+    //   }
+    //   cur_inner->updateNode(hv->kvtss, new_page_nodes);
+    //   cur_inner->header.writeUnlock();
+    // }
+    // lt.unlock();
+
+    // leaf_to_remote(new_page_nodes);
+    // innerNodeUpdatingTable.clear();
+  }
 
   void bulk_loading() {
     BTreeNode *bulk_tree_root = bulk_load_tree_->root;
