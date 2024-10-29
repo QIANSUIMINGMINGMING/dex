@@ -4,17 +4,30 @@ int main() {
   using namespace XMD;
 
   // Create an allocator
-  size_t buffer_size = 1024;  // Adjust as needed
+  size_t buffer_size = 2000000;  // Adjust as needed
   MonotonicBufferRing<SkipListNode> allocator(buffer_size);
 
   // Create a SkipList
-;  SkipList skip_list(&allocator);
+  ;
+  SkipList skip_list(&allocator);
 
   // Insert some key-value pairs
-  for (int i = 1; i <= 10; ++i) {
+  auto start = std::chrono::high_resolution_clock::now();
+  for (int i = 1; i <= 1000000; ++i) {
     KVTS kvts = {i, i * 10, 0};  // Key=i, Value=i*10, ts=0
     skip_list.insert(kvts);
   }
+
+  std::sort(&allocator[0], &allocator[0] + 1000000);
+  // std::sort(allocator[0])
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+          .count();
+  std::cout << "Insertion time: " << duration << " us" << std::endl;
+  // calculate throughput
+  std::cout << "Throughput: " << ((double)1000000 / duration) * 1000 * 1000
+            << " KVTS/s" << std::endl;
 
   // Try to find some keys
   for (int i = 1; i <= 10; ++i) {

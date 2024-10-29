@@ -77,7 +77,7 @@ class MonotonicBufferRing {
 };
 
 // inline skiplist relevant
-constexpr int kMaxLevel = 8;
+constexpr int kMaxLevel = 13;
 constexpr int kMaxSkipListData = (1 << 16) - 1;
  
 struct SkipListNode {

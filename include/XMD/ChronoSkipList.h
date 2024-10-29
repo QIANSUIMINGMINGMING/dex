@@ -19,53 +19,53 @@ class SkipList {
 
   void insert(const KVTS& kvts) {
     cur_num +=1;
-    uint16_t update[kMaxLevel]{0};
-    uint16_t current_offset = 0;
-    // Find positions to update
-    for (int level = kMaxLevel - 1; level >= 0; --level) {
-      while (true) {
-        SkipListNode& current_node =
-            allocator_->operator[](current_offset + head_offset);
-        uint16_t relative_next = current_node.next_ptrs[level];
-        if (relative_next == 0) break;
+    // uint16_t update[kMaxLevel]{0};
+    // uint16_t current_offset = 0;
+    // // Find positions to update
+    // for (int level = kMaxLevel - 1; level >= 0; --level) {
+    //   while (true) {
+    //     SkipListNode& current_node =
+    //         allocator_->operator[](current_offset + head_offset);
+    //     uint16_t relative_next = current_node.next_ptrs[level];
+    //     if (relative_next == 0) break;
 
-        SkipListNode& next_node =
-            allocator_->operator[](relative_next + head_offset);
+    //     SkipListNode& next_node =
+    //         allocator_->operator[](relative_next + head_offset);
 
-        if (next_node.kvts < kvts) {
-          current_offset = relative_next;
-        } else {
-          break;
-        }
-      }
-      update[level] = current_offset;
-    }
+    //     if (next_node.kvts < kvts) {
+    //       current_offset = relative_next;
+    //     } else {
+    //       break;
+    //     }
+    //   }
+    //   update[level] = current_offset;
+    // }
 
-    // Generate random level for new node
-    int node_level = randomLevel();
+    // // Generate random level for new node
+    // int node_level = randomLevel();
 
     // Allocate new node
     size_t new_offset_size_t;
     SkipListNode* new_node = allocator_->alloc(new_offset_size_t);
-    uint64_t new_offset;
-    allocator_->check_distance(head_offset, new_offset);
-    uint16_t bit16relative = static_cast<uint16_t>(new_offset);
+    // uint64_t new_offset;
+    // allocator_->check_distance(head_offset, new_offset);
+    // uint16_t bit16relative = static_cast<uint16_t>(new_offset);
 
-    new_node->kvts = kvts;
-    new_node->level = node_level;
-    std::memset(new_node->next_ptrs, 0, sizeof(new_node->next_ptrs));
+    // new_node->kvts = kvts;
+    // new_node->level = node_level;
+    // std::memset(new_node->next_ptrs, 0, sizeof(new_node->next_ptrs));
 
-    // Update pointers
-    for (int i = 0; i < node_level; ++i) {
-      uint16_t prev_offset = update[i];
-      SkipListNode& prev_node =
-          allocator_->operator[](head_offset + prev_offset);
+    // // Update pointers
+    // for (int i = 0; i < node_level; ++i) {
+    //   uint16_t prev_offset = update[i];
+    //   SkipListNode& prev_node =
+    //       allocator_->operator[](head_offset + prev_offset);
 
-      uint16_t relative_next = prev_node.next_ptrs[i];
+    //   uint16_t relative_next = prev_node.next_ptrs[i];
 
-      new_node->next_ptrs[i] = relative_next;
-      prev_node.next_ptrs[i] = new_offset;
-    }
+    //   new_node->next_ptrs[i] = relative_next;
+    //   prev_node.next_ptrs[i] = new_offset;
+    // }
   }
 
   bool find(const Key& key, Value& value_out) {
