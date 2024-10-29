@@ -18,7 +18,7 @@ int main() {
     skip_list.insert(kvts);
   }
 
-  std::sort(&allocator[0], &allocator[0] + 1000000);
+  // std::sort(&allocator[0], &allocator[0] + 1000000);
   // std::sort(allocator[0])
   auto end = std::chrono::high_resolution_clock::now();
   auto duration =
