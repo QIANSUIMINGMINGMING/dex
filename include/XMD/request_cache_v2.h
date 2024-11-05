@@ -41,7 +41,7 @@ class RequestCache {
   RequestHashTable rht_;
   u64 chrono_size_;
   u64 ht_size_;
-  u64 cur_ht_size_{0};
+  std::atomic<u64> cur_ht_size_{0};
   std::thread software_threads[kMaxRequestThreads];
 
   RequestCache(u64 chrono_size, u64 ht_size_, int thread_num)
@@ -49,7 +49,9 @@ class RequestCache {
 
         };
 
-  void sample_erase() {}
+  void sample_erase() {
+    
+  }
 
   void insert(const KVTS &kvts) {
     TSV * tsv = nullptr;
@@ -74,7 +76,11 @@ class RequestCache {
         cutil::write_unlock(tsv->lock_);
       }
     } else {
-      
+      rht_.insert(kvts.k, new TSV{0, kvts.ts, kvts.v});
+      u64 old = cur_ht_size_.fetch_add(1);
+      if (old >= ht_size_) {
+        sample_erase();
+      }
     }
   }
 };
