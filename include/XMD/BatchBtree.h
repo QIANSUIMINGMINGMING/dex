@@ -4,9 +4,9 @@
 
 // #include <boost/unordered/concurrent_flat_map.hpp>
 // #include <boost/unordered/unordered_map.hpp>
+#include <../third_party/libcuckoo/cuckoohash_map.hh>
 #include <atomic>
 #include <iostream>
-#include <libcuckoo/cuckoohash_map.hh>
 #include <thread>
 
 #include "XMD_index_cache.h"
