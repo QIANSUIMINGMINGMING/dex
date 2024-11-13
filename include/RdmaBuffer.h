@@ -15,6 +15,8 @@ private:
   static const int kCasBufferCnt = 256;   // async, buffer safty
 
   static const int kBatchPageBufferCnt = 64; // For Batch
+  static const int kHashBufferCnt = 8;       // For Hash
+  static const int kHashPageSize = 128;
 
   // For SMART
   static const int kSmartPageBufferCnt =
@@ -35,6 +37,7 @@ private:
 
   uint64_t *cas_buffer;
   char *batch_page_buffer;
+  char *hash_buffer;
   char *page_buffer;
   char *sibling_buffer;
   char *smart_page_buffer;
@@ -44,6 +47,7 @@ private:
   char *range_buffer;
   char *zero_byte;
 
+  int hash_buffer_cur;
   int page_buffer_cur;
   int sibling_buffer_cur;
   int cas_buffer_cur;
@@ -77,7 +81,9 @@ public:
     unlock_buffer =
         (uint64_t *)((char *)cas_buffer + sizeof(uint64_t) * kCasBufferCnt);
     batch_page_buffer = (char *)((char *)unlock_buffer + sizeof(uint64_t));
-    zero_64bit = (uint64_t *)((char *)batch_page_buffer + kBatchPageBufferCnt*kPageSize);
+    hash_buffer =
+        (char *)((char *)batch_page_buffer + kBatchPageBufferCnt * kPageSize);
+    zero_64bit = (uint64_t *)((char *)hash_buffer + kHashBufferCnt*kHashPageSize);
     // zero_64bit = (uint64_t *)((char *)unlock_buffer + sizeof(uint64_t));
     entry_buffer =
         reinterpret_cast<uint64_t *>((char *)zero_64bit + sizeof(int64_t));
@@ -150,6 +156,11 @@ public:
   uint64_t *get_entry_buffer() {
     entry_buffer_cur = (entry_buffer_cur + 1) % kEntryBufferCnt;
     return entry_buffer + entry_buffer_cur;
+  }
+
+  char * get_hash_buffer() {
+    hash_buffer_cur = (hash_buffer_cur + 1) % kHashBufferCnt;
+    return hash_buffer + hash_buffer_cur * kPageSize;
   }
 
   char *get_range_buffer() { return range_buffer; }

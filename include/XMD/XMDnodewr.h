@@ -2,6 +2,7 @@
 
 #include "../DSM.h"
 #include "InMemoryBtree.h"
+#include "../cache/node_wr.h"
 // #define RDMATIMER 1
 
 namespace XMD {

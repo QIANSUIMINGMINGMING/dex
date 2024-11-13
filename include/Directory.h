@@ -4,6 +4,7 @@
 #include <thread>
 
 #include <unordered_map>
+#include "XMD/requestCache_rpc.h"
 
 #include "Common.h"
 
@@ -17,6 +18,8 @@ public:
             int memThreadCount);
 
   ~Directory();
+
+  XMD::MRequestCache *requestCache;
 
 private:
   DirectoryConnection *dCon;

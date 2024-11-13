@@ -2,6 +2,7 @@
 #include "Common.h"
 
 #include "Connection.h"
+#include "GlobalAddress.h"
 #include "cache/btree_rpc.h"
 
 #include <gperftools/profiler.h>
@@ -21,12 +22,20 @@ Directory::Directory(DirectoryConnection *dCon, RemoteConnection *remoteInfo,
     uint64_t per_directory_dsm_size = dCon->dsmSize / memThreadCount;
     dsm_start.nodeID = nodeID;
     dsm_start.offset = per_directory_dsm_size * dirID;
+
+    dsm_start.offset += define::kMemorySideHashSize;
+    per_directory_dsm_size -= define::kMemorySideHashSize;
     // std::cout << "Per directory DM size (MB) = "
     //           << per_directory_dsm_size / define::MB << std::endl;
     chunckAlloc = new GlobalAllocator(dsm_start, per_directory_dsm_size);
   }
 
+  GlobalAddress hash_start;
+  hash_start.nodeID = nodeID;
+  hash_start.offset = 0;
+
   dirTh = new std::thread(&Directory::dirThread, this);
+  requestCache = new XMD::MRequestCache(hash_start, define::kMemorySideHashSize);
 }
 
 Directory::~Directory() { delete chunckAlloc; }
@@ -68,6 +77,24 @@ void Directory::process_message(const RawMessage *m) {
   // }
   RawMessage *send = nullptr;
   switch (m->type) {
+  case RpcType::XMD_LOOKUP: {
+    requestCache->lookup();
+    int ret;
+    send = (RawMessage *)dCon->message->getSendPool();
+    send->level = ret;
+    if (ret == 1) {
+      send->addr.val = 0;
+    }
+    break;
+  }
+
+  case RpcType::XMD_UPDATE: {
+    requestCache->update();
+    send = (RawMessage *)dCon->message->getSendPool();
+    // send->level = ret;
+    // send->addr = addr;
+    break;
+  }
 
   case RpcType::LOOKUP: {
     auto addr = m->addr;

@@ -29,8 +29,8 @@ public:
     }
 
  void get_lock() {
-    uint32_t new_value = 0;
-    uint32_t old_value = 0;
+    uint64_t new_value = 0;
+    uint64_t old_value = 0;
     do {
       while (true) {
         old_value = __atomic_load_n(&version_lock, __ATOMIC_ACQUIRE);
@@ -44,7 +44,7 @@ public:
   }
 
   bool try_get_lock() {
-    uint32_t v = __atomic_load_n(&version_lock, __ATOMIC_ACQUIRE);
+    uint64_t v = __atomic_load_n(&version_lock, __ATOMIC_ACQUIRE);
     if (v & lockSet) {
       return false;
     }

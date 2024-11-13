@@ -44,6 +44,8 @@ uint64_t three_state = 0;
 
 #define LATENCY_COLLECT 1
 
+enum class RPC_type { LOOKUP, UPDATE, INSERT, DELETE };
+
 class CacheManager {
  public:
   /* Core Data Structure */
@@ -578,7 +580,7 @@ class CacheManager {
   int cold_to_hot_with_admission(GlobalAddress global_node, void **ret_page,
                                  NodePage *parent, unsigned child_idx,
                                  bool &refresh, Key k, Value &result,
-                                 bool &success, cachepush::RPC_type rpc_type) {
+                                 bool &success, RPC_type rpc_type) {
     static thread_local std::mt19937 *generator = nullptr;
     if (!generator) generator = new std::mt19937(clock() + pthread_self());
     static thread_local std::uniform_int_distribution<uint64_t> distribution(
@@ -590,7 +592,7 @@ class CacheManager {
       // Just read from remote and return to the application
       int ret = 1;
       switch (rpc_type) {
-        case cachepush::RPC_type::LOOKUP: {
+        case RPC_type::LOOKUP: {
           auto buffer_page = checked_remote_read(global_node);
           auto cur_leaf = reinterpret_cast<NodePage *>(buffer_page);
           if (!cur_leaf->header.rangeValid(k)) {

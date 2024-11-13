@@ -13,7 +13,7 @@
 #include <queue>
 
 // Environment Config
-#define MAX_CORO_NUM 8
+#define MAX_CORO_NUM 2
 #define ALLOC_ALLIGN_BIT 8
 
 #define BOOST_COROUTINES_NO_DEPRECATION_WARNING

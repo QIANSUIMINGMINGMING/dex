@@ -355,6 +355,8 @@ public:
   void smart_alloc_nodes(int node_num, GlobalAddress *addrs, bool align = true);
 #endif
 
+  int rpc_xmd_lookup(Key k, Value &result, XMD::KVTS &fetched);
+  int rpc_xmd_update(const XMD::KVTS &kvts);
   int rpc_lookup(GlobalAddress start_node, uint64_t k, uint64_t &result);
   int rpc_update(GlobalAddress start_node, uint64_t k, uint64_t result,
                  GlobalAddress &leaf);
@@ -452,9 +454,9 @@ inline GlobalAddress DSM::alloc(size_t size, uint32_t node_id) {
 inline GlobalAddress DSM::smart_alloc(size_t size, bool align) {
   // thread_local int cur_target_node =
   //     (this->getMyThreadID() + this->getMyNodeID()) % MEMORY_NODE_NUM;
-  thread_local int cur_target_node =
-      (this->getMyThreadID() + this->getMyNodeID()) % conf.machineNR;
-  // thread_local int cur_target_node = conf.machineNR - 1;
+  // thread_local int cur_target_node =
+  //     (this->getMyThreadID() + this->getMyNodeID()) % conf.machineNR;
+  thread_local int cur_target_node = conf.machineNR - 1;
   thread_local int cur_target_dir_id =
       (this->getMyThreadID() + this->getMyNodeID()) % NR_DIRECTORY;
   if (++cur_target_dir_id == NR_DIRECTORY) {
@@ -495,6 +497,47 @@ inline void DSM::smart_alloc_nodes(int node_num, GlobalAddress *addrs,
 }
 
 #endif
+
+inline int DSM::rpc_xmd_lookup(Key k, Value &result, XMD::KVTS &fetched) {
+  RawMessage m;
+  m.type = RpcType::XMD_LOOKUP;
+  m.k = k;
+
+  thread_local uint16_t dir_id = pthread_self() % memThreadCount;
+
+  // many memory TODO
+  // uint16_t mem_node_id = k % (conf.machineNR - conf.computeNR);
+  uint16_t mem_node_id = conf.machineNR - 1;
+  
+  this->rpc_call_dir(m, mem_node_id, dir_id);
+  dir_id = (dir_id + 1) % memThreadCount;
+
+  auto mm = rpc_wait();
+  if (mm->level >= 1) {
+    result = mm->addr.val;
+  }
+  return mm->level;
+}
+
+inline int DSM::rpc_xmd_update(const XMD::KVTS &kvts) {
+  RawMessage m;
+  m.type = RpcType::XMD_UPDATE;
+  m.k = kvts.k;
+  m.v = kvts.v;
+  m.addr.val = kvts.ts;
+
+  thread_local uint16_t dir_id = pthread_self() % memThreadCount;
+
+  // many memory TODO
+  // uint16_t mem_node_id = k % (conf.machineNR - conf.computeNR);
+  uint16_t mem_node_id = conf.machineNR - 1;
+
+  this->rpc_call_dir(m, mem_node_id, dir_id);
+  dir_id = (dir_id + 1) % memThreadCount;
+
+  auto mm = rpc_wait();
+  return mm->level;
+}
 
 inline int DSM::rpc_lookup(GlobalAddress start_node, uint64_t k,
                            uint64_t &result) {

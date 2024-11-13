@@ -140,7 +140,7 @@ class BatchBTree {
           bool lookup_success = false;
           remote_flag = cache_.cold_to_hot_with_admission(
               inner_child_ga, reinterpret_cast<void **>(&cur_node), inner, idx,
-              refresh, k, result, lookup_success, cachepush::RPC_type::LOOKUP);
+              refresh, k, result, lookup_success, RPC_type::LOOKUP);
           if (remote_flag == 1) {
             inner->IOUnlock();
             return lookup_success;

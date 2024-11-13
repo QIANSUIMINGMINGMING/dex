@@ -60,6 +60,7 @@ DSM::DSM(const DSMConfig &conf)
   initRDMAConnection();
 
   // Build the directory and also startup the standbythread in memory node
+  assert(memThreadCount == 1);
   for (int i = 0; i < memThreadCount; ++i) {
     dirAgent[i] = new Directory(dirCon[i], remoteInfo, conf.machineNR, i,
                                 myNodeID, memThreadCount);

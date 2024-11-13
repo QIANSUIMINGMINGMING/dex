@@ -3,6 +3,7 @@
 #include "BatchBtree.h"
 #include "XMD_request_cache.h"
 #include "mc_agent.h"
+#include "../tree_api.h"
 
 template <class T, class P>
 class BatchForest : public tree_api<T, P> {

@@ -64,7 +64,7 @@
 #define RAW_RECV_CQ_COUNT 512
 
 // { app thread
-#define MAX_APP_THREAD 36
+#define MAX_APP_THREAD 96
 
 #define APP_MESSAGE_NR 96
 
@@ -119,7 +119,8 @@ constexpr uint64_t GB = 1024ull * MB;
 constexpr uint16_t kCacheLineSize = 64;
 
 // for remote allocate
-constexpr uint64_t dsmSize = 64;  // GB  [CONFIG]
+constexpr uint64_t dsmSize = 96;  // GB  [CONFIG]
+constexpr uint64_t kMemorySideHashSize = 24 * GB;
 constexpr uint64_t kChunkSize = 32 * MB;
 
 // RDMA buffer

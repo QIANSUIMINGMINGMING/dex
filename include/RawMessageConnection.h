@@ -15,7 +15,9 @@ enum RpcType : uint8_t {
   INSERT,
   UPDATE,
   DELETE,
-  SMO
+  SMO,
+  XMD_LOOKUP,
+  XMD_UPDATE
 };
 
 struct RawMessage {
@@ -24,7 +26,7 @@ struct RawMessage {
   uint16_t node_id; // source node ID
   uint16_t app_id; // source thread ID, so the receiver can send the message for
                    // reply
-
+  
   GlobalAddress addr; // for malloc and for root_address of B+-Tree RPC
   int level;          // the return value of pushdown op
   uint64_t k;         // key for B+-Tree RPC
