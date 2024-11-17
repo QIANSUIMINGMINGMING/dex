@@ -10,6 +10,7 @@
 #include "uniform.h"
 #include "uniform_generator.h"
 #include "zipf.h"
+#include "cache/node_wr.h"
 
 namespace DSBench {
 constexpr int MAX_TEST_NUM = 200000000;
@@ -261,32 +262,67 @@ void thread_run(int id, int op_num, int warm_num) {
   execute_op_num.fetch_add(i);
 }
 
-int main() {
-//   DSBench::init_random();
-  int op_num = 20000000;
-  int warm_num = 20000000;
-  // map = libcuckoo::cuckoohash_map<uint64_t, uint64_t>(100000000);
-  // fadedmap = libfadecuckoo::cuckoohash_map<uint64_t, uint64_t>(100000000);
+DSM *dsm;
+std::thread th[MAX_THREAD_NUM];
+XMD::RequestCache_v3::RequestCache *cache;
+constexpr uint64_t defaultCacheSize = 128 * define::MB;
 
-  DSBench::zipf_test_keys = new uint64_t[op_num + warm_num];
-  DSBench::uniform_test_keys = new uint64_t[op_num + warm_num];
-  std::thread th[MAX_THREAD_NUM];
-  DSBench::generate_workload(op_num, warm_num, thread_num, 50, 25, 25, 0, 0);
-  for (size_t i=0; i< thread_num; i++) {
-    th[i] = std::thread(thread_run, i, op_num, warm_num);
+int main () {
+  DSBench::init_random();
+  int CNodeCount = 1;
+  DSMConfig config;
+  config.machineNR = 2;
+  config.memThreadCount = 1;
+  config.computeNR = CNodeCount;
+  config.index_type = 3;
+  dsm = DSM::getInstance(config);
+  cachepush::global_dsm_ = dsm;
+  // #Worker-threads in this CNode
+  uint16_t node_id = dsm->getMyNodeID();
+  if (node_id < CNodeCount) {
+    cache = new XMD::RequestCache_v3::RequestCache(dsm, defaultCacheSize, node_id, CNodeCount);
+    XMD::RequestCache_v3::RequestCache::cur_buffer_start = 0;
+    XMD::RequestCache_v3::RequestCache::cur_buffer_remain = 0;
+    int i = 0;
+    dsm->registerThread();
+    while (i < 20000) {
+      XMD::KVTS kvts;
+      kvts.k = i;
+      kvts.ts = XMD::myClock::get_ts();
+      kvts.v = i + 1;
+      cache->insert(kvts);
+    }
   }
-
-
-  for (size_t i=0; i< thread_num; i++) {
-    th[i].join();
-  }
-  
-  uint64_t total_tp_sum = 0;
-  for (size_t i = 0; i < thread_num; i++) {
-    total_tp_sum += total_tp[i];
-  }
-
-  std::cout << "total throughput" << total_tp_sum << std::endl;
-
-  return 0;
+  std::cout << "Before barrier finish" << std::endl;
+  dsm->barrier("finish");
 }
+
+// int main() {
+// //   DSBench::init_random();
+//   int op_num = 5000000;
+//   int warm_num = 5000000;
+//   // map = libcuckoo::cuckoohash_map<uint64_t, uint64_t>(100000000);
+//   // fadedmap = libfadecuckoo::cuckoohash_map<uint64_t, uint64_t>(100000000);
+
+//   DSBench::zipf_test_keys = new uint64_t[op_num + warm_num];
+//   DSBench::uniform_test_keys = new uint64_t[op_num + warm_num];
+//   std::thread th[MAX_THREAD_NUM];
+//   DSBench::generate_workload(op_num, warm_num, thread_num, 50, 25, 25, 0, 0);
+//   for (size_t i=0; i< thread_num; i++) {
+//     th[i] = std::thread(thread_run, i, op_num, warm_num);
+//   }
+
+
+//   for (size_t i=0; i< thread_num; i++) {
+//     th[i].join();
+//   }
+  
+//   uint64_t total_tp_sum = 0;
+//   for (size_t i = 0; i < thread_num; i++) {
+//     total_tp_sum += total_tp[i];
+//   }
+
+//   std::cout << "total throughput" << total_tp_sum << std::endl;
+
+//   return 0;
+// }

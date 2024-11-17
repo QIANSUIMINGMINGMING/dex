@@ -81,7 +81,11 @@
 
 // From SMART
 #define POLL_CQ_MAX_CNT_ONCE 8
-#define MAX_CORO_NUM 8
+#define MAX_CORO_NUM 2
+#define ALLOC_ALLIGN_BIT 8
+
+#define ROUND_UP(x, n) (((x) + (1 << (n)) - 1) & ~((1 << (n)) - 1))
+#define ROUND_DOWN(x, n) ((x) & ~((1 << (n)) - 1))
 
 void bindCore(uint16_t core);
 char *getIP();

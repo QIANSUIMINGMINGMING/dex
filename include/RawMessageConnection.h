@@ -4,6 +4,7 @@
 #include "AbstractMessageConnection.h"
 #include "GlobalAddress.h"
 
+#include <cstdint>
 #include <thread>
 
 enum RpcType : uint8_t {
@@ -16,8 +17,7 @@ enum RpcType : uint8_t {
   UPDATE,
   DELETE,
   SMO,
-  XMD_LOOKUP,
-  XMD_UPDATE
+  KICK
 };
 
 struct RawMessage {
@@ -31,6 +31,7 @@ struct RawMessage {
   int level;          // the return value of pushdown op
   uint64_t k;         // key for B+-Tree RPC
   uint64_t v;         // value for B+-Tree RPC
+  uint64_t ts;
   // Updated node
 } __attribute__((packed));
 

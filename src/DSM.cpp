@@ -63,7 +63,7 @@ DSM::DSM(const DSMConfig &conf)
   assert(memThreadCount == 1);
   for (int i = 0; i < memThreadCount; ++i) {
     dirAgent[i] = new Directory(dirCon[i], remoteInfo, conf.machineNR, i,
-                                myNodeID, memThreadCount);
+                                myNodeID, memThreadCount, conf.computeNR);
   }
 
 #ifdef COUNT_RDMA

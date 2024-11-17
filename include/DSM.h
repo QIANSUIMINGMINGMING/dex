@@ -4,6 +4,7 @@
 #include <atomic>
 
 #include "Cache.h"
+#include "Common.h"
 #include "Config.h"
 #include "Connection.h"
 #include "DSMKeeper.h"
@@ -12,6 +13,7 @@
 #include "MultiAllocator.h"
 #include "RdmaBuffer.h"
 #include "smart_local_allocator.h"
+#include <cstdint>
 #include <iostream>
 #include <random>
 #include <thread>
@@ -355,8 +357,7 @@ public:
   void smart_alloc_nodes(int node_num, GlobalAddress *addrs, bool align = true);
 #endif
 
-  int rpc_xmd_lookup(Key k, Value &result, XMD::KVTS &fetched);
-  int rpc_xmd_update(const XMD::KVTS &kvts);
+  int rpc_cuckoo_kick(GlobalAddress start_node, const XMD::KVTS & kvts, TS oldest_ts, int rand_slot);
   int rpc_lookup(GlobalAddress start_node, uint64_t k, uint64_t &result);
   int rpc_update(GlobalAddress start_node, uint64_t k, uint64_t result,
                  GlobalAddress &leaf);
@@ -498,41 +499,18 @@ inline void DSM::smart_alloc_nodes(int node_num, GlobalAddress *addrs,
 
 #endif
 
-inline int DSM::rpc_xmd_lookup(Key k, Value &result, XMD::KVTS &fetched) {
+inline int DSM::rpc_cuckoo_kick(GlobalAddress start_node, const XMD::KVTS & kvts, TS oldest_ts, int kick_slot) {
   RawMessage m;
-  m.type = RpcType::XMD_LOOKUP;
-  m.k = k;
-
-  thread_local uint16_t dir_id = pthread_self() % memThreadCount;
-
-  // many memory TODO
-  // uint16_t mem_node_id = k % (conf.machineNR - conf.computeNR);
-  uint16_t mem_node_id = conf.machineNR - 1;
-  
-  this->rpc_call_dir(m, mem_node_id, dir_id);
-  dir_id = (dir_id + 1) % memThreadCount;
-
-  auto mm = rpc_wait();
-  if (mm->level >= 1) {
-    result = mm->addr.val;
-  }
-  return mm->level;
-}
-
-inline int DSM::rpc_xmd_update(const XMD::KVTS &kvts) {
-  RawMessage m;
-  m.type = RpcType::XMD_UPDATE;
+  m.type = RpcType::KICK;
   m.k = kvts.k;
+  m.addr.val = oldest_ts;
   m.v = kvts.v;
-  m.addr.val = kvts.ts;
+  m.ts = kvts.ts;
+  m.level = kick_slot; 
 
+  assert(memThreadCount == 1);
   thread_local uint16_t dir_id = pthread_self() % memThreadCount;
-
-  // many memory TODO
-  // uint16_t mem_node_id = k % (conf.machineNR - conf.computeNR);
-  uint16_t mem_node_id = conf.machineNR - 1;
-
-  this->rpc_call_dir(m, mem_node_id, dir_id);
+  this->rpc_call_dir(m, myNodeID, dir_id);
   dir_id = (dir_id + 1) % memThreadCount;
 
   auto mm = rpc_wait();

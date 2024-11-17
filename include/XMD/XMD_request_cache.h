@@ -12,7 +12,7 @@
 namespace XMD {
 
 constexpr uint64_t kIntervalNumber = 1024;
-constexpr uint64_t kIntervalSize = 1 << 16 - 1;
+constexpr uint64_t kIntervalSize = (1 << 16) - 1;
 
 class KVCache {
  public:

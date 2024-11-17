@@ -45,7 +45,7 @@ class MonotonicBufferRing {
     if (need_restart) {
       goto restart;
     }
-    start += RING_SUB(start_offset, start, size);
+    start += RING_SUB(start_offset, start % size, size);
     cutil::write_unlock(start_mutex);
   }
 

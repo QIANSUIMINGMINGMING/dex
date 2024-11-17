@@ -2542,7 +2542,7 @@ public:
       table_position pos =
           map_.get().template cuckoo_insert_loop<locked_table_mode>(hv, b, key, need_resize);
       if (need_resize) {
-        return;
+        assert(pos.status == failure_table_full);
       }
       if (pos.status == ok) {
         map_.get().add_to_bucket(pos.index, pos.slot, hv.partial,

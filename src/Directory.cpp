@@ -3,6 +3,7 @@
 
 #include "Connection.h"
 #include "GlobalAddress.h"
+#include "XMD/requestCache_rpc.h"
 #include "cache/btree_rpc.h"
 
 #include <gperftools/profiler.h>
@@ -13,12 +14,13 @@ bool enable_cache;
 
 Directory::Directory(DirectoryConnection *dCon, RemoteConnection *remoteInfo,
                      uint32_t machineNR, uint16_t dirID, uint16_t nodeID,
-                     int memThreadCount)
+                     int memThreadCount, int cnode_num)
     : dCon(dCon), remoteInfo(remoteInfo), machineNR(machineNR), dirID(dirID),
       nodeID(nodeID), dirTh(nullptr) {
 
   { // chunck alloctor
     GlobalAddress dsm_start;
+    assert(memThreadCount == 1);
     uint64_t per_directory_dsm_size = dCon->dsmSize / memThreadCount;
     dsm_start.nodeID = nodeID;
     dsm_start.offset = per_directory_dsm_size * dirID;
@@ -35,7 +37,9 @@ Directory::Directory(DirectoryConnection *dCon, RemoteConnection *remoteInfo,
   hash_start.offset = 0;
 
   dirTh = new std::thread(&Directory::dirThread, this);
-  requestCache = new XMD::MRequestCache(hash_start, define::kMemorySideHashSize);
+
+  requestCache = new XMD::MRequestCache(hash_start, (char *)dCon->dsmPool,
+                                        define::kMemorySideHashSize, cnode_num);
 }
 
 Directory::~Directory() { delete chunckAlloc; }
@@ -77,22 +81,15 @@ void Directory::process_message(const RawMessage *m) {
   // }
   RawMessage *send = nullptr;
   switch (m->type) {
-  case RpcType::XMD_LOOKUP: {
-    requestCache->lookup();
-    int ret;
+  case RpcType::KICK: {
+    // requestCache.
+    int ret = requestCache->cuckoo_kick(m->node_id, m->k, m->v, m->ts,
+                                        m->addr.val, m->level);
     send = (RawMessage *)dCon->message->getSendPool();
     send->level = ret;
     if (ret == 1) {
       send->addr.val = 0;
     }
-    break;
-  }
-
-  case RpcType::XMD_UPDATE: {
-    requestCache->update();
-    send = (RawMessage *)dCon->message->getSendPool();
-    // send->level = ret;
-    // send->addr = addr;
     break;
   }
 
