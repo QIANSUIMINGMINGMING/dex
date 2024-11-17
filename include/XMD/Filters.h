@@ -7,7 +7,7 @@
 #include <shared_mutex>
 
 // #include "BufferRing.h"
-#include "Common.h"
+#include "../Common.h"
 #include "./bloomfilter/pbf.h"
 
 namespace XMD {

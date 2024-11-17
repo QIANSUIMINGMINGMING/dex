@@ -3,7 +3,7 @@
 #include "../DSM.h"
 #include "../GlobalAddress.h"
 #include "../third_party/libcuckoo/cuckoohash_map.hh"
-#include "Common.h"
+#include "../Common.h"
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>

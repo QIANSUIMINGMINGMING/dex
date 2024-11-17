@@ -1,4 +1,4 @@
-#include "XMD/XMD_request_cache.h"
+
 #include "XMD/request_cache_v2.h"
 #include "XMD/libfadecuckoo/faded_cuckoohash_map.hh"
 // #include "data_structure_bench.h"
@@ -268,6 +268,7 @@ XMD::RequestCache_v3::RequestCache *cache;
 constexpr uint64_t defaultCacheSize = 128 * define::MB;
 
 int main () {
+  DSBench::kKeySpace = 100000000;
   DSBench::init_random();
   int CNodeCount = 1;
   DSMConfig config;

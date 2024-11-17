@@ -7,7 +7,7 @@
 #include <shared_mutex>
 #include <thread>
 
-#include "Common.h"
+#include "../Common.h"
 
 namespace XMD {
 template <typename T>
