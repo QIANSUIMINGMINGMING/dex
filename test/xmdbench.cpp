@@ -46,6 +46,7 @@ uint64_t tp[MAX_APP_THREAD][8];
 // uint64_t total_tp[MAX_APP_THREAD];
 uint64_t total_time[MAX_APP_THREAD];
 
+int64_t kCPUPercentage = 80;
 std::mutex mtx;
 std::condition_variable cv;
 uint32_t kReadRatio;
@@ -946,7 +947,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Calculate 50% of the period
-    int64_t quota = period / 2;
+    int64_t quota = (period * kCPUPercentage) / 100;
     std::cout << "quota " << quota << std::endl;
 
     // Set cpu.cfs_quota_us to 50% of the period

@@ -4,3 +4,5 @@ build
 *.ipynb
 .VSCodeCounter
 *.png
+*.pdf
+.cache
