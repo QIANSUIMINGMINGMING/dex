@@ -102,7 +102,7 @@ void DSM::registerThread() {
   if (index_type == 2) { // smart
     rdma_buffer = (char *)cache.data + thread_id * define::kPerThreadRdmaBuf;
   } else {
-    rdma_buffer = (char *)cache.data + thread_id * 12 * define::MB;
+    rdma_buffer = (char *)cache.data + thread_id * 24 * define::MB;
   }
   //   std::cout << "PerCoroRdmaBuff = " << define::kPerCoroRdmaBuf <<
   //   std::endl; std::cout << "I am setting buffer in register thread " <<

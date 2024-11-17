@@ -1,21 +1,21 @@
 
-#include "XMD/request_cache_v2.h"
 #include "XMD/libfadecuckoo/faded_cuckoohash_map.hh"
+#include "XMD/request_cache_v2.h"
 // #include "data_structure_bench.h"
 #include <city.h>
 
 #include <cstdint>
 
 #include "Common.h"
+#include "cache/node_wr.h"
 #include "uniform.h"
 #include "uniform_generator.h"
 #include "zipf.h"
-#include "cache/node_wr.h"
 
 namespace DSBench {
 constexpr int MAX_TEST_NUM = 200000000;
 constexpr int MAX_WARM_UP_NUM = 200000000;
-int kKeySpace;
+uint64_t kKeySpace;
 constexpr double zipfian = 0.99;
 
 uint64_t op_mask = (1ULL << 56) - 1;
@@ -24,11 +24,11 @@ uint64_t op_mask = (1ULL << 56) - 1;
 
 // uint64_t zipf_test_keys[MAX_TEST_NUM + MAX_WARM_UP_NUM]{0};
 // uint64_t zipf_test_values[MAX_TEST_NUM + MAX_WARM_UP_NUM]{0};
-uint64_t *uniform_test_keys;
-uint64_t *zipf_test_keys;
+uint64_t* uniform_test_keys;
+uint64_t* zipf_test_keys;
 
 struct zipf_gen_state state;
-uniform_key_generator_t *uniform_generator = nullptr;
+uniform_key_generator_t* uniform_generator = nullptr;
 
 enum op_type : uint8_t { Insert, Update, Lookup, Delete, Range };
 enum workload_type : uint8_t { Zipf, Uniform };
@@ -65,22 +65,22 @@ void generate_workload(int op_num, int warm_num, int thread_num, int read_ratio,
                        int insert_ratio, int update_ratio, int delete_ratio,
                        int range_ratio) {
   // Generate workload for bulk_loading
-  kKeySpace = warm_num + op_num * insert_ratio;
+  kKeySpace = warm_num + op_num * insert_ratio * 0.01;
 
   uint64_t* space_array = new uint64_t[kKeySpace];
   for (uint64_t i = 0; i < kKeySpace; ++i) {
     space_array[i] = i;
   }
 
-//   for (size_t i = 0; i < warm_num; i++) {
-//     uniform_test_values[i] = i;
-//     zipf_test_values[i] = i;
-//   }
+  //   for (size_t i = 0; i < warm_num; i++) {
+  //     uniform_test_values[i] = i;
+  //     zipf_test_values[i] = i;
+  //   }
 
   int per_thread_op_num = op_num / thread_num;
   int per_thread_warm_num = warm_num / thread_num;
-//   std::mt19937 gen(0xc70f6907UL);
-//   std::shuffle(&space_array[0], &space_array[kKeySpace - 1], gen);
+  //   std::mt19937 gen(0xc70f6907UL);
+  //   std::shuffle(&space_array[0], &space_array[kKeySpace - 1], gen);
 
   init_random();
   for (size_t i = 0; i < warm_num; i++) {
@@ -161,7 +161,7 @@ void generate_workload(int op_num, int warm_num, int thread_num, int read_ratio,
 }
 }  // namespace DSBench
 
-constexpr int MAX_THREAD_NUM = 96;
+constexpr int MAX_THREAD_NUM = MAX_APP_THREAD;
 int thread_num = MAX_THREAD_NUM;
 uint64_t total_tp[MAX_THREAD_NUM]{0};
 
@@ -262,14 +262,97 @@ void thread_run(int id, int op_num, int warm_num) {
   execute_op_num.fetch_add(i);
 }
 
-DSM *dsm;
+DSM* dsm;
 std::thread th[MAX_THREAD_NUM];
-XMD::RequestCache_v3::RequestCache *cache;
+XMD::RequestCache_v3::RequestCache* cache;
 constexpr uint64_t defaultCacheSize = 128 * define::MB;
 
-int main () {
-  DSBench::kKeySpace = 100000000;
-  DSBench::init_random();
+void thread_run_rc(int id, int op_num, int warm_num) {
+  bindCore(id);
+  dsm->registerThread();
+  int thread_op_num = op_num / thread_num;
+  int thread_warm_num = warm_num / thread_num;
+  uint64_t* thread_warm_array =
+      DSBench::uniform_test_keys + id * thread_warm_num;
+  uint64_t* thread_op_array_uniform =
+      DSBench::uniform_test_keys + warm_num + id * thread_op_num;
+  uint64_t* thread_op_array_zipf =
+      DSBench::zipf_test_keys + warm_num + id * thread_op_num;
+
+  uint64_t* thread_op_array;
+  if (true) {
+    thread_op_array = thread_op_array_uniform;
+  } else {
+    thread_op_array = thread_op_array_zipf;
+  }
+
+  int i = 0;
+  while (i < thread_warm_num) {
+    XMD::KVTS kvts;
+    kvts.k = thread_warm_array[i];
+    kvts.ts = XMD::myClock::get_ts();
+    kvts.v = thread_warm_array[i] + 1;
+    cache->insert(kvts);
+    i++;
+  }
+  i = 0;
+  warm_up_ok.fetch_add(1);
+  while (warm_up_ok.load() < thread_num);
+  auto start = std::chrono::high_resolution_clock::now();
+  // old_tss[tss_idx] = XMD::myClock::get_ts();
+  while (i < thread_op_num) {
+    uint64_t key = thread_op_array[i];
+    DSBench::op_type cur_op = static_cast<DSBench::op_type>(key >> 56);
+    key = key & DSBench::op_mask;
+    switch (cur_op) {
+      case DSBench::op_type::Lookup: {
+        Value v;
+        cache->lookup(key, v);
+      } break;
+      case DSBench::op_type::Insert: {
+        XMD::KVTS kvts;
+        kvts.k = key;
+        kvts.ts = XMD::myClock::get_ts();
+        kvts.v = key + 1;
+        cache->insert(kvts);
+        // fadedmap.insert(key, ts, v);
+      } break;
+
+      case DSBench::op_type::Update: {
+        XMD::KVTS kvts;
+        kvts.k = key;
+        kvts.ts = XMD::myClock::get_ts();
+        kvts.v = key + 2;
+        cache->insert(kvts);
+        // fadedmap.update(key, ts, v);
+      } break;
+    }
+    i++;
+  }
+
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+          .count();
+
+  // The one who first finish should terminate all threads
+  // To avoid the straggling thread
+  if (!one_finish.load()) {
+    one_finish.store(true);
+    thread_op_num = 0;
+  }
+
+  workers.fetch_sub(1);
+
+  uint64_t throughput = i / (static_cast<double>(duration) / std::pow(10, 6));
+  total_tp[id] = throughput;  // (ops/s)
+  // total_time[id] = static_cast<uint64_t>(duration);
+  // std::cout << "Success ratio = "
+  //           << success_counter / static_cast<double>(counter) << std::endl;
+  execute_op_num.fetch_add(i);
+}
+
+int main() {
   int CNodeCount = 1;
   DSMConfig config;
   config.machineNR = 2;
@@ -279,45 +362,80 @@ int main () {
   dsm = DSM::getInstance(config);
   cachepush::global_dsm_ = dsm;
   // #Worker-threads in this CNode
+  uint64_t op_num = 100000000;
+  uint64_t warm_num = 100000000;
+  DSBench::kKeySpace = warm_num + op_num;
+  DSBench::init_random();
   uint16_t node_id = dsm->getMyNodeID();
   if (node_id < CNodeCount) {
-    cache = new XMD::RequestCache_v3::RequestCache(dsm, defaultCacheSize, node_id, CNodeCount);
-    XMD::RequestCache_v3::RequestCache::cur_buffer_start = 0;
-    XMD::RequestCache_v3::RequestCache::cur_buffer_remain = 0;
-    int i = 0;
-    dsm->registerThread();
-    while (i < 20000) {
-      XMD::KVTS kvts;
-      kvts.k = i;
-      kvts.ts = XMD::myClock::get_ts();
-      kvts.v = i + 1;
-      cache->insert(kvts);
+    cache = new XMD::RequestCache_v3::RequestCache(dsm, defaultCacheSize,
+                                                   node_id, CNodeCount);
+    DSBench::zipf_test_keys = new uint64_t[op_num + warm_num];
+    DSBench::uniform_test_keys = new uint64_t[op_num + warm_num];
+    std::thread th[MAX_THREAD_NUM];
+    DSBench::generate_workload(op_num, warm_num, thread_num, 50, 25, 25, 0, 0);
+    for (size_t i = 0; i < thread_num; i++) {
+      th[i] = std::thread(thread_run_rc, i, op_num, warm_num);
     }
+
+    for (size_t i = 0; i < thread_num; i++) {
+      th[i].join();
+    }
+
+    uint64_t total_tp_sum = 0;
+    for (size_t i = 0; i < thread_num; i++) {
+      total_tp_sum += total_tp[i];
+    }
+
+    std::cout << "total throughput" << total_tp_sum << std::endl;
   }
   std::cout << "Before barrier finish" << std::endl;
   dsm->barrier("finish");
 }
+
+//   int i = 0;
+//   dsm->registerThread();
+
+//   auto start = std::chrono::high_resolution_clock::now();
+//   while (i < 1000000) {
+//     XMD::KVTS kvts;
+//     kvts.k = i;
+//     kvts.ts = XMD::myClock::get_ts();
+//     kvts.v = i + 1;
+//     cache->insert(kvts);
+//     i++;
+//   }
+//   auto end = std::chrono::high_resolution_clock::now();
+//   auto duration =
+//       std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+//           .count();
+//   std::cout << "Insert time = " << duration << std::endl;
+//   // throughput
+//   std::cout << "Throughput = "
+//             << i / (static_cast<double>(duration) / std::pow(10, 6))
+//             << std::endl;
+// }
 
 // int main() {
 // //   DSBench::init_random();
 //   int op_num = 5000000;
 //   int warm_num = 5000000;
 //   // map = libcuckoo::cuckoohash_map<uint64_t, uint64_t>(100000000);
-//   // fadedmap = libfadecuckoo::cuckoohash_map<uint64_t, uint64_t>(100000000);
+//   // fadedmap = libfadecuckoo::cuckoohash_map<uint64_t,
+//   uint64_t>(100000000);
 
 //   DSBench::zipf_test_keys = new uint64_t[op_num + warm_num];
 //   DSBench::uniform_test_keys = new uint64_t[op_num + warm_num];
 //   std::thread th[MAX_THREAD_NUM];
-//   DSBench::generate_workload(op_num, warm_num, thread_num, 50, 25, 25, 0, 0);
-//   for (size_t i=0; i< thread_num; i++) {
+//   DSBench::generate_workload(op_num, warm_num, thread_num, 50, 25, 25, 0,
+//   0); for (size_t i=0; i< thread_num; i++) {
 //     th[i] = std::thread(thread_run, i, op_num, warm_num);
 //   }
-
 
 //   for (size_t i=0; i< thread_num; i++) {
 //     th[i].join();
 //   }
-  
+
 //   uint64_t total_tp_sum = 0;
 //   for (size_t i = 0; i < thread_num; i++) {
 //     total_tp_sum += total_tp[i];

@@ -64,7 +64,7 @@
 #define RAW_RECV_CQ_COUNT 512
 
 // { app thread
-#define MAX_APP_THREAD 96
+#define MAX_APP_THREAD 48
 
 #define APP_MESSAGE_NR 96
 
@@ -134,7 +134,7 @@ constexpr int64_t kPerThreadRdmaBuf =
     (rdmaBufferSize * define::GB / MAX_APP_THREAD) & aligned_cache;
 constexpr int64_t kSmartPerCoroRdmaBuf =
     (kPerThreadRdmaBuf / MAX_CORO_NUM) & aligned_cache;
-constexpr int64_t kPerCoroRdmaBuf = 128 * 1024;
+constexpr int64_t kPerCoroRdmaBuf = 512 * 1024;
 
 // for store root pointer
 constexpr uint64_t kRootPointerStoreOffest = kChunkSize / 2;
@@ -163,7 +163,7 @@ constexpr uint64_t kOnChipLockNum = kLockChipMemSize * 8;  // 1bit-lock
 constexpr uint64_t kMaxLevelOfTree = 7;
 
 // To align with MAX_CORO_NUM
-constexpr uint16_t kMaxCoro = 8;
+constexpr uint16_t kMaxCoro = 2;
 // constexpr int64_t kPerCoroRdmaBuf = 128 * 1024;
 
 constexpr uint8_t kMaxHandOverTime = 8;

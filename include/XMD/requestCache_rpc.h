@@ -1,20 +1,21 @@
 #pragma once
 
-#include "../DSM.h"
-#include "../GlobalAddress.h"
-#include "../third_party/libcuckoo/cuckoohash_map.hh"
-#include "../Common.h"
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+
+#include "../Common.h"
+#include "../DSM.h"
+#include "../GlobalAddress.h"
+#include "../third_party/libcuckoo/cuckoohash_map.hh"
 
 namespace XMD {
 constexpr uint64_t defaultSlot = 4;
 
 struct HashSlot {
-  Key k{0};   // u64
-  Value v{0}; // u64
-  TS ts{0};   // u64
+  Key k{0};    // u64
+  Value v{0};  // u64
+  TS ts{0};    // u64
 } __attribute__((packed));
 
 struct HashBucket {
@@ -27,7 +28,7 @@ constexpr uint64_t perHashCacheSize = define::kMemorySideHashSize / 4;
 constexpr uint64_t kHashBucketNum = perHashCacheSize / sizeof(HashBucket);
 
 class ComputeSideHash {
-public:
+ public:
   ComputeSideHash(DSM *dsm) : dsm_(dsm) {
     my_node_id_ = dsm_->getMyNodeID();
     int num_cnode = dsm_->getComputeNum();
@@ -41,10 +42,13 @@ public:
     get_two_bucket_pos(kvts.k, i1, i2);
     assert(dsm_->is_register());
     auto hash_buffer = dsm_->get_rbuf(0).get_hash_buffer();
+    assert(hash_buffer != nullptr);
     // insert to local
     locks_[i1].lock();
-    dsm_->read_sync(hash_buffer, remote_ht_start_.offset + i1 * size_per_bucket,
-                    size_per_bucket);
+    GlobalAddress remote_bucket;
+    remote_bucket.nodeID = remote_ht_start_.nodeID;
+    remote_bucket.offset = remote_ht_start_.offset + i1 * size_per_bucket;
+    dsm_->read_sync(hash_buffer, remote_bucket, size_per_bucket);
     HashBucket *hash_bucket = reinterpret_cast<HashBucket *>(hash_buffer);
     int insert_pos = defaultSlot;
     for (int i = 0; i < defaultSlot; i++) {
@@ -62,10 +66,11 @@ public:
       slot->k = kvts.k;
       slot->ts = kvts.ts;
       slot->v = kvts.v;
-      dsm_->write_sync((char *)slot,
-                       remote_ht_start_.offset + i1 * size_per_bucket +
-                           insert_pos * sizeof(HashSlot),
-                       sizeof(HashSlot));
+      GlobalAddress remote_slot;
+      remote_slot.nodeID = remote_ht_start_.nodeID;
+      remote_slot.offset = remote_ht_start_.offset + i1 * size_per_bucket +
+                           insert_pos * sizeof(HashSlot);
+      dsm_->write_sync((char *)slot, remote_slot, sizeof(HashSlot));
       locks_[i1].unlock();
       return;
     }
@@ -103,8 +108,10 @@ public:
 
     auto hash_buffer = dsm_->get_rbuf(0).get_hash_buffer();
     locks_[i1].lock();
-    dsm_->read_sync(hash_buffer, remote_ht_start_.offset + i1 * size_per_bucket,
-                    size_per_bucket);
+    GlobalAddress remote_bucket;
+    remote_bucket.nodeID = remote_ht_start_.nodeID;
+    remote_bucket.offset = remote_ht_start_.offset + i1 * size_per_bucket;
+    dsm_->read_sync(hash_buffer, remote_bucket, size_per_bucket);
     HashBucket *hash_bucket = reinterpret_cast<HashBucket *>(hash_buffer);
     for (int i = 0; i < defaultSlot; i++) {
       if (hash_bucket->slots[i].k == k) {
@@ -115,7 +122,10 @@ public:
     }
     locks_[i1].unlock();
     locks_[i2].lock();
-    dsm_->read_sync(hash_buffer, remote_ht_start_.offset + i2 * size_per_bucket,
+    GlobalAddress remote_bucket2;
+    remote_bucket2.nodeID = remote_ht_start_.nodeID;
+    remote_bucket2.offset = remote_ht_start_.offset + i2 * size_per_bucket;
+    dsm_->read_sync(hash_buffer, remote_bucket2,
                     size_per_bucket);
     hash_bucket = reinterpret_cast<HashBucket *>(hash_buffer);
     for (int i = 0; i < defaultSlot; i++) {
@@ -129,14 +139,13 @@ public:
     return false;
   }
 
-private:
+ private:
   using partial_t = uint8_t;
 
   static uint64_t reserve_calc(const uint64_t n) {
     const uint64_t buckets = (n + defaultSlot - 1) / defaultSlot;
     uint64_t blog2;
-    for (blog2 = 0; (uint64_t(1) << blog2) < buckets; ++blog2)
-      ;
+    for (blog2 = 0; (uint64_t(1) << blog2) < buckets; ++blog2);
     assert(n <= buckets * defaultSlot && buckets <= hashsize(blog2));
     return blog2;
   }
@@ -194,7 +203,7 @@ private:
   using counter_type = int64_t;
   LIBCUCKOO_SQUELCH_PADDING_WARNING
   class LIBCUCKOO_ALIGNAS(64) spinlock {
-  public:
+   public:
     spinlock() : elem_counter_(0), is_migrated_(true) { lock_.clear(); }
 
     spinlock(const spinlock &other) noexcept
@@ -210,8 +219,7 @@ private:
     }
 
     void lock() noexcept {
-      while (lock_.test_and_set(std::memory_order_acq_rel))
-        ;
+      while (lock_.test_and_set(std::memory_order_acq_rel));
     }
 
     void unlock() noexcept { lock_.clear(std::memory_order_release); }
@@ -226,7 +234,7 @@ private:
     bool &is_migrated() noexcept { return is_migrated_; }
     bool is_migrated() const noexcept { return is_migrated_; }
 
-  private:
+   private:
     std::atomic_flag lock_;
     counter_type elem_counter_;
     bool is_migrated_;
@@ -241,8 +249,7 @@ private:
 };
 
 class MRequestCache {
-
-public:
+ public:
   MRequestCache(GlobalAddress start, char *dsm_base, uint64_t range,
                 int num_cnode) {
     for (int i = 0; i < num_cnode; i++) {
@@ -317,7 +324,7 @@ public:
     return 1;
   }
 
-private:
+ private:
   inline bool get_slot(HashBucket *b, int &slot, Key k, TS oldest_TS) {
     int insert_pos = defaultSlot;
     for (int i = 0; i < defaultSlot; i++) {
@@ -342,8 +349,7 @@ private:
   static uint64_t reserve_calc(const uint64_t n) {
     const uint64_t buckets = (n + defaultSlot - 1) / defaultSlot;
     uint64_t blog2;
-    for (blog2 = 0; (uint64_t(1) << blog2) < buckets; ++blog2)
-      ;
+    for (blog2 = 0; (uint64_t(1) << blog2) < buckets; ++blog2);
     assert(n <= buckets * defaultSlot && buckets <= hashsize(blog2));
     return blog2;
   }
@@ -402,4 +408,4 @@ private:
   u64 hash_power_ = reserve_calc(perHashCacheSize);
 };
 
-} // namespace XMD
+}  // namespace XMD
