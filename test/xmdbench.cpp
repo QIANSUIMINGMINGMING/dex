@@ -1,16 +1,16 @@
 #include "Timer.h"
 // #include "Tree.h"
 #include <city.h>
+#include <libcgroup.h>
 #include <numa.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <libcgroup.h>
-#include <filesystem>
 
 #include <algorithm>
 #include <cmath>
 #include <condition_variable>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "../util/system.hpp"
+#include "XMD/BatchForest.h"
 #include "gaussian_generator.h"
 #include "sherman_wrapper.h"
 #include "smart/smart_wrapper.h"
@@ -28,7 +29,6 @@
 #include "uniform.h"
 #include "uniform_generator.h"
 #include "zipf.h"
-#include "XMD/BatchForest.h"
 
 // TODO bindCore
 namespace sherman {
@@ -191,7 +191,8 @@ void generate_index() {
 
     case 3:  // XMD
     {
-      tree = new BatchForest<Key, Value>(dsm, cache_mb, rpc_rate, admission_rate);
+      tree =
+          new BatchForest<Key, Value>(dsm, cache_mb, rpc_rate, admission_rate);
       break;
     }
   }
@@ -901,7 +902,7 @@ int main(int argc, char *argv[]) {
   uint64_t straggler_cluster_tp = 0;
   uint64_t collect_times = 0;
 
-  if (node_id == CNodeCount && CNodeCount!=1) {
+  if (node_id == CNodeCount && CNodeCount != 1) {
     std::string cgroup_name = "test_cpu_limit_group";
     std::string cgroup_path = "/sys/fs/cgroup/" + cgroup_name;
 
@@ -1151,19 +1152,33 @@ int main(int argc, char *argv[]) {
       //   total_max_time = std::max_element(total_time, total_time + k)
       // }
       total_max_time = *std::max_element(total_time, total_time + kThreadCount);
+      if (workload_type == WorkLoadType::uniform ||
+          workload_type == WorkLoadType::zipf) {
+        total_cluster_max_time = total_max_time;
+      } else if (workload_type == WorkLoadType::gaussian_01 ||
+                 workload_type == WorkLoadType::gaussian_001) {
+        total_cluster_max_time = dsm->max_total(total_max_time, CNodeCount);
+      } else {
+        assert(false);
+      }
       // total_cluster_max_time = dsm->max_total(total_max_time, CNodeCount);
       std::cout << "XMD node max time: " << total_max_time;
       std::cout << "XMD cluster max time: " << total_cluster_max_time;
 
       uint64_t XMDsetting_node_throughput =
           execute_op.load() /
-          (static_cast<double>(total_max_time) / std::pow(10, 6));
+          (static_cast<double>(total_cluster_max_time) / std::pow(10, 6));
       uint64_t XMDsetting_cluster_throughput =
           dsm->sum_total(XMDsetting_node_throughput, CNodeCount, false);
-      
 
-      std::cout << "XMD node throughput: " << (static_cast<double>(XMDsetting_node_throughput)/std::pow(10,6)) << " MOPS" << std::endl;
-      std::cout << "XMD cluster throughput: " << (static_cast<double>(XMDsetting_cluster_throughput)/std::pow(10,6)) <<" MOPS"<<std::endl;
+      std::cout << "XMD node throughput: "
+                << (static_cast<double>(XMDsetting_node_throughput) /
+                    std::pow(10, 6))
+                << " MOPS" << std::endl;
+      std::cout << "XMD cluster throughput: "
+                << (static_cast<double>(XMDsetting_cluster_throughput) /
+                    std::pow(10, 6))
+                << " MOPS" << std::endl;
 
       // uint64_t max_time = 0;
       // for (int i = 0; i < kThreadCount; ++i) {
