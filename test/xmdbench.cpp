@@ -939,6 +939,7 @@ int main(int argc, char *argv[]) {
     // Set CPU quota to 50% of the default period
     // First, retrieve the default period
     int64_t period;
+    std::cout << "period " << period << std::endl;
     ret = cgroup_get_value_int64(cpu_ctrl, "cpu.cfs_period_us", &period);
     if (ret < 0) {
       fprintf(stderr, "Failed to get cpu.cfs_period_us: %s\n", strerror(-ret));
