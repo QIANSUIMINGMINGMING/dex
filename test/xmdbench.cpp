@@ -47,7 +47,7 @@ uint64_t tp[MAX_APP_THREAD][8];
 // uint64_t total_tp[MAX_APP_THREAD];
 uint64_t total_time[MAX_APP_THREAD];
 
-int64_t kCPUPercentage = 100;
+int64_t kCPUPercentage = 50;
 std::mutex mtx;
 std::condition_variable cv;
 uint32_t kReadRatio;
