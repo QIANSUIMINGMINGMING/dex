@@ -6,6 +6,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <libcgroup.h>
+#include <filesystem>
 
 #include <algorithm>
 #include <cmath>
@@ -901,79 +902,45 @@ int main(int argc, char *argv[]) {
   uint64_t collect_times = 0;
 
   if (node_id == CNodeCount && CNodeCount!=1) {
-    const char *cg_name = "limit_cpu_cgroup";
-    struct cgroup *cg;
-    struct cgroup_controller *cpu_ctrl;
-    int ret;
+    std::string cgroup_name = "test_cpu_limit_group";
+    std::string cgroup_path = "/sys/fs/cgroup/" + cgroup_name;
 
-    // Initialize the cgroup library
-    if (cgroup_init() != 0) {
-      fprintf(stderr, "Failed to initialize cgroup library\n");
-      return EXIT_FAILURE;
+    // Step 1: Create the cgroup directory
+    if (!std::filesystem::exists(cgroup_path)) {
+      if (mkdir(cgroup_path.c_str(), 0755) != 0) {
+        std::cerr << "Failed to create cgroup directory: "
+                  << std::strerror(errno) << std::endl;
+        return 1;
+      }
     }
 
-    // Create a new cgroup
-    cg = cgroup_new_cgroup(cg_name);
-    if (!cg) {
-      fprintf(stderr, "Failed to create cgroup structure\n");
-      return EXIT_FAILURE;
+    // Step 2: Set the CPU limit in cpu.max
+    std::string cpu_max_file = cgroup_path + "/cpu.max";
+    std::ofstream cpu_max(cpu_max_file);
+    if (!cpu_max.is_open()) {
+      std::cerr << "Failed to open cpu.max: " << std::strerror(errno)
+                << std::endl;
+      return 1;
     }
 
-    // Add the CPU controller to the cgroup
-    cpu_ctrl = cgroup_add_controller(cg, "cpu");
-    if (!cpu_ctrl) {
-      fprintf(stderr, "Failed to add CPU controller\n");
-      cgroup_free(&cg);
-      return EXIT_FAILURE;
+    // Limit to k CPU usage (k * 100000 out of 100000 microseconds)
+    int64_t cpu_percentage_max = 100000;
+    int64_t quota = (kCPUPercentage * cpu_percentage_max) / 100;
+    // "quota cpu_percentage_max" means "quota out of cpu_percentage_max"
+    cpu_max << quota << " " << cpu_percentage_max;
+    cpu_max.close();
+
+    // Step 3: Add the current process to the cgroup
+    std::string cgroup_procs_file = cgroup_path + "/cgroup.procs";
+    std::ofstream cgroup_procs(cgroup_procs_file);
+    if (!cgroup_procs.is_open()) {
+      std::cerr << "Failed to open cgroup.procs: " << std::strerror(errno)
+                << std::endl;
+      return 1;
     }
 
-    // Create the cgroup in the system
-    ret = cgroup_create_cgroup(cg, 0);
-    if (ret < 0) {
-      fprintf(stderr, "Failed to create cgroup in system: %s\n",
-              strerror(-ret));
-      cgroup_free(&cg);
-      return EXIT_FAILURE;
-    }
-
-    // Set CPU quota to 50% of the default period
-    // First, retrieve the default period
-    int64_t period;
-    std::cout << "period " << period << std::endl;
-    ret = cgroup_get_value_int64(cpu_ctrl, "cpu.cfs_period_us", &period);
-    if (ret < 0) {
-      fprintf(stderr, "Failed to get cpu.cfs_period_us: %s\n", strerror(-ret));
-      cgroup_free(&cg);
-      return EXIT_FAILURE;
-    }
-    
-    // Calculate 50% of the period
-    int64_t quota = (period * kCPUPercentage) / 100;
-    std::cout << "quota " << quota << std::endl;
-
-    // Set cpu.cfs_quota_us to 50% of the period
-    ret = cgroup_set_value_int64(cpu_ctrl, "cpu.cfs_quota_us", quota);
-    if (ret < 0) {
-      fprintf(stderr, "Failed to set cpu.cfs_quota_us: %s\n", strerror(-ret));
-      cgroup_free(&cg);
-      return EXIT_FAILURE;
-    }
-
-    // Optionally, verify the settings
-    int64_t verify_quota = 0;
-    ret = cgroup_get_value_int64(cpu_ctrl, "cpu.cfs_quota_us", &verify_quota);
-    if (ret == 0) {
-      printf("Set cpu.cfs_quota_us to %ld\n", verify_quota);
-    }
-    // Attach the current process to the cgroup
-    ret = cgroup_attach_task_pid(cg, getpid());
-    if (ret < 0) {
-      fprintf(stderr, "Failed to attach task to cgroup: %s\n", strerror(-ret));
-      cgroup_free(&cg);
-      return EXIT_FAILURE;
-    }
-
-    printf("CPU usage limited to 50%% for this process.\n");
+    cgroup_procs << getpid();
+    cgroup_procs.close();
   }
 
   if (node_id < CNodeCount) {
