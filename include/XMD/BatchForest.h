@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BatchBtree.h"
+#include "../tree_api.h"
 
 template <class T, class P>
 class BatchForest : public tree_api<T, P> {

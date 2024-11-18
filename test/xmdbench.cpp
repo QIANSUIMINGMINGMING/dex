@@ -37,7 +37,7 @@ extern uint64_t cache_miss[MAX_APP_THREAD][8];
 extern uint64_t cache_hit[MAX_APP_THREAD][8];
 
 }  // namespace sherman
-int kMaxThread = 32;
+int kMaxThread = MAX_APP_THREAD;
 // std::thread th[MAX_APP_THREAD];
 
 uint64_t latency[MAX_APP_THREAD][LATENCY_WINDOWS]{0};
@@ -47,7 +47,7 @@ uint64_t tp[MAX_APP_THREAD][8];
 // uint64_t total_tp[MAX_APP_THREAD];
 uint64_t total_time[MAX_APP_THREAD];
 
-int64_t kCPUPercentage = 50;
+int64_t kCPUPercentage = 10;
 std::mutex mtx;
 std::condition_variable cv;
 uint32_t kReadRatio;

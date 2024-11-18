@@ -19,7 +19,8 @@
 #include "XMDnodewr.h"
 // #include "btree_node.h"
 // #include "latency_collector.h"
-// #include "node_wr.h"
+#include "../cache/node_wr.h"
+#include "../cache/leanstore_cache.h"
 
 namespace XMD {
 // FIXME(BT): these two variable is better to be included in the cache

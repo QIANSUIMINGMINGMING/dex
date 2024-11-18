@@ -33,7 +33,7 @@ Directory::~Directory() { delete chunckAlloc; }
 
 void Directory::dirThread() {
   // bindCore((19 - dirID) * 2);
-  bindCore(39 - dirID);
+  bindCore(MAX_APP_THREAD + dirID);
   Debug::notifyInfo("dir %d launch!\n", dirID);
 
   while (true) {

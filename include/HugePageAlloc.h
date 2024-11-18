@@ -6,6 +6,7 @@
 #include <memory.h>
 #include <numa.h>
 #include <sys/mman.h>
+#include "Debug.h"
 
 char *getIP();
 inline void *hugePageAlloc(size_t size) {
