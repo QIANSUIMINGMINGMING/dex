@@ -792,7 +792,7 @@ void thread_run(int id) {
 }
 
 void parse_args(int argc, char *argv[]) {
-  if (argc != 23) {
+  if (argc != 24) {
     printf("argc = %d\n", argc);
     printf(
         "Usage: ./benchmark kNodeCount kReadRatio kInsertRatio kUpdateRatio "
@@ -803,7 +803,8 @@ void parse_args(int argc, char *argv[]) {
         "check_correctness(0=no, 1=yes) time_based(0=no, "
         "1=yes) early_stop(0=no, 1=yes) "
         "index(0=cachepush, 1=sherman) rpc_rate admission_rate "
-        "auto_tune(0=false, 1=true) kMaxThread"
+        "auto_tune(0=false, 1=true) kMaxThread "
+        "cpu percentage"
         " \n");
     exit(-1);
   }
@@ -837,8 +838,8 @@ void parse_args(int argc, char *argv[]) {
   admission_rate = atof(argv[20]);  // Admission control ratio for DEX
   auto_tune = atoi(argv[21]);  // Whether needs the parameter tuning phase: run
                                // multiple times for a single operation
-
   kMaxThread = atoi(argv[22]);
+  kCPUPercentage = atoi(argv[23]);
   // How to make insert ready?
   kKeySpace = bulk_load_num +
               ceil((op_num + warmup_num) * (kInsertRatio / 100.0)) + 1000;

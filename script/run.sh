@@ -90,15 +90,16 @@ dis=$1
 op=$2
 idx=$3
 t=$4
+cpupercentage=$5
 
 # Validate input arguments (optional)
-if [ -z "$dis" ] || [ -z "$op" ] || [ -z "$idx" ] || [ -z "$t" ]; then
-    echo "Usage: $0 <dis> <op> <idx> <t>"
+if [ -z "$dis" ] || [ -z "$op" ] || [ -z "$idx" ] || [ -z "$t" ] || [ -z "$cpupercentage" ] ; then
+    echo "Usage: $0 <dis> <op> <idx> <t> <cpupercentage>"
     exit 1
 fi
 
 # Execute the command with provided parameters
-sudo ../build/xmdbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[4]} ${distribution[$dis]} ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 48
+sudo ../build/xmdbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[4]} ${distribution[$dis]} ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 48 $cpupercentage
 
 sleep 2
 
