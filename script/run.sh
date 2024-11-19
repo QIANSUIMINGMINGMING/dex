@@ -51,8 +51,8 @@
 
 #!/bin/bash
 # ops
-read=(100 50 95 0 0)
-insert=(0 0 0 100 5)
+read=(100 50 95 50 0)
+insert=(0 0 0 50 5)
 update=(0 50 5 0 0)
 delete=(0 0 0 0 0)
 range=(0 0 0 0 95)
