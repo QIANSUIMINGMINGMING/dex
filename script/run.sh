@@ -99,7 +99,7 @@ if [ -z "$dis" ] || [ -z "$op" ] || [ -z "$idx" ] || [ -z "$t" ] || [ -z "$cpupe
 fi
 
 # Execute the command with provided parameters
-sudo ../build/xmdbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[4]} ${distribution[$dis]} ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 48 $cpupercentage
+sudo ~/dex/build/xmdbench $nodenum ${read[$op]} ${insert[$op]} ${update[$op]} ${delete[$op]} ${range[$op]} ${threads[$t]} ${mem_threads[0]} ${cache[4]} ${distribution[$dis]} ${zipf[0]} $bulk $warmup $runnum $correct $timebase $early $idx $rpc $admit $tune 48 $cpupercentage
 
 sleep 2
 
