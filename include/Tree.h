@@ -45,6 +45,7 @@ class LeafPage;
 class Tree {
 
 public:
+
   Tree(DSM *dsm, uint16_t tree_id = 0, int cache_size = 512);
 
   void insert(const Key &k, const Value &v, CoroContext *cxt = nullptr,
@@ -65,7 +66,9 @@ public:
   void index_cache_statistics();
   void clear_statistics();
 
-private:
+  bool range_state = false;
+
+ private:
   DSM *dsm;
   uint64_t tree_id;
   GlobalAddress root_ptr_ptr; // the address which stores root pointer;
@@ -77,6 +80,7 @@ private:
   LocalLockNode *local_locks[MAX_MACHINE];
 
   IndexCache *index_cache;
+
 
   void print_verbose();
 
