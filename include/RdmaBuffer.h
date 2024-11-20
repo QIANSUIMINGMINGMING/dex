@@ -77,6 +77,7 @@ public:
     entry_buffer =
         reinterpret_cast<uint64_t *>((char *)zero_64bit + sizeof(int64_t));
     *zero_64bit = 0;
+    range_buffer = (char *)((char *)entry_buffer + sizeof(uint64_t) * kEntryBufferCnt);
     assert((char *)zero_64bit + 8 - buffer < define::kPerCoroRdmaBuf);
   }
 
