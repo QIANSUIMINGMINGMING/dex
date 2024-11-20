@@ -344,6 +344,9 @@ void generate_workload() {
         insert_array = space_array + left_b + bulk_num_per_node;
         assert((left_b + bulk_num_per_node + warmup_insert_key_num +
                 workload_insert_key_num) <= right_b);
+        std::cout << left_b << " " << bulk_num_per_node << " "
+                  << warmup_insert_key_num << " " << workload_insert_key_num
+                  << " " << right_b << std::endl;
       }
     }
     assert(accumulated_bulk_num == bulk_load_num);
