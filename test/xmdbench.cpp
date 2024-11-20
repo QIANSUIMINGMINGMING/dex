@@ -295,7 +295,7 @@ void generate_workload() {
   }
   bulk_array = new uint64_t[bulk_load_num];
   uint64_t thread_warmup_insert_num =
-      (kInsertRatio / 100.0) * (op_num / totalThreadCount);
+      (kInsertRatio / 100.0) * (warmup_num / totalThreadCount);
   uint64_t warmup_insert_key_num = thread_warmup_insert_num * kThreadCount;
 
   uint64_t thread_workload_insert_num =
