@@ -360,7 +360,7 @@ void generate_workload() {
 
     uint64_t regular_node_insert_num =
         static_cast<uint64_t>(thread_warmup_insert_num * kMaxThread) +
-        static_cast<uint64_t>(workload_insert_key_num * kMaxThread);
+        static_cast<uint64_t>(thread_workload_insert_num * kMaxThread);
     insert_array =
         space_array + bulk_load_num + regular_node_insert_num * node_id;
     assert((bulk_load_num + regular_node_insert_num * node_id +
