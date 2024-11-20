@@ -563,7 +563,7 @@ void dirthread_run(int dirID) {
 
 void thread_run(int id) {
   // Interleave the thread binding
-  bindCore(id);
+  // bindCore(id);
   // numa_set_localalloc();
   //  std::cout << "Before register the thread" << std::endl;
   dsm->registerThread();
