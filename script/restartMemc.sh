@@ -9,7 +9,6 @@ port=$(awk 'NR==2{print}' ~/dex/memcached.conf)
 # # launch memcached
 # ssh ${addr} "memcached -u root -l ${addr} -p  ${port} -c 10000 -d -P /tmp/memcached.pid"
 
-cat /tmp/memcached.pid | xargs kill
 memcached -u root -l ${addr} -p  ${port} -c 10000 -d -P /tmp/memcached.pid
 
 sleep 1
