@@ -21,17 +21,25 @@ int main() {
   int ret = 0;
 
   // Get the list of devices
-  dev_list = ibv_get_device_list(nullptr);
+  int devicesNum;
+  dev_list = ibv_get_device_list(&devicesNum);
   if (!dev_list) {
     perror("Failed to get IB devices list");
     return 1;
   }
-  dev = dev_list[0];
+  int devIndex = -1;
+  for (int i = 0; i < devicesNum; ++i) {
+    // printf("Device %d: %s\n", i, ibv_get_device_name(deviceList[i]));
+    if (ibv_get_device_name(dev_list[i])[5] == '2') {
+      devIndex = i;
+      break;
+    }
+  }
+  dev = dev_list[devIndex];
   if (!dev) {
     std::cerr << "No IB devices found\n";
     return 1;
   }
-
   // Open device context
   ctx = ibv_open_device(dev);
   if (!ctx) {
