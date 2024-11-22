@@ -412,7 +412,9 @@ void Tree::insert(const Key &k, const Value &v, CoroContext *cxt, int coro_id) {
         return;
       }
       // cache stale, from root,
-      index_cache->invalidate(entry);
+      if (!range_state) {
+        index_cache->invalidate(entry);
+      }
     }
     cache_miss[dsm->getMyThreadID()][0]++;
   }
@@ -507,7 +509,7 @@ int Tree::range_query(const Key &from, const Key &to,
                       std::pair<Key, Value> *value_buffer, CoroContext *cxt,
                       int coro_id) {
 
-  const int kParaFetch = 32;
+  const int kParaFetch = 1;
   thread_local std::vector<InternalPage *> result;
   thread_local std::vector<GlobalAddress> leaves;
 
@@ -545,7 +547,7 @@ int Tree::range_query(const Key &from, const Key &to,
   }
 
   int cq_cnt = 0;
-  char *range_buffer = (dsm->get_rbuf(coro_id)).get_range_buffer();
+  char *range_buffer = (dsm->get_rbuf(coro_id)).get_page_buffer();
   for (size_t i = 0; i < leaves.size(); ++i) {
     if (i > 0 && i % kParaFetch == 0) {
       dsm->poll_rdma_cq(kParaFetch);
@@ -736,7 +738,7 @@ re_read:
     }
 #endif
 
-    if (result.level == 1 && enable_cache) {
+    if (result.level == 1 && enable_cache && !range_state) {
       index_cache->add_to_cache(page);
     }
 

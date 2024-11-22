@@ -4,7 +4,6 @@ int pollWithCQ(ibv_cq *cq, int pollNumber, struct ibv_wc *wc) {
   int count = 0;
 
   do {
-
     int new_count = ibv_poll_cq(cq, 1, wc);
     count += new_count;
 
@@ -68,11 +67,10 @@ static inline void fillSgeWr(ibv_sge &sg, ibv_recv_wr &wr, uint64_t source,
   wr.num_sge = 1;
 }
 
-// for UD and DC
-bool rdmaSend(ibv_qp *qp, uint64_t source, uint64_t size, uint32_t lkey,
-              ibv_ah *ah, uint32_t remoteQPN /* remote dct_number */,
-              bool isSignaled) {
-
+bool rdmaSolicitedSend(ibv_qp *qp, uint64_t source, uint64_t size,
+                       uint32_t lkey, ibv_ah *ah,
+                       uint32_t remoteQPN /* remote dct_number */,
+                       bool isSignaled) {
   struct ibv_sge sg;
   struct ibv_send_wr wr;
   struct ibv_send_wr *wrBad;
@@ -85,8 +83,34 @@ bool rdmaSend(ibv_qp *qp, uint64_t source, uint64_t size, uint32_t lkey,
   wr.wr.ud.remote_qpn = remoteQPN;
   wr.wr.ud.remote_qkey = UD_PKEY;
 
-  if (isSignaled)
-    wr.send_flags = IBV_SEND_SIGNALED;
+  if (isSignaled) wr.send_flags = IBV_SEND_SIGNALED;
+  // printf("Before: send the message\n");
+  wr.send_flags |= IBV_SEND_SOLICITED;
+  if (ibv_post_send(qp, &wr, &wrBad)) {
+    Debug::notifyError("Send with RDMA_SEND failed.");
+    // printf("After: message send failed\n");
+    return false;
+  }
+  // printf("After: message send succeeded\n");
+  return true;
+}
+// for UD and DC
+bool rdmaSend(ibv_qp *qp, uint64_t source, uint64_t size, uint32_t lkey,
+              ibv_ah *ah, uint32_t remoteQPN /* remote dct_number */,
+              bool isSignaled) {
+  struct ibv_sge sg;
+  struct ibv_send_wr wr;
+  struct ibv_send_wr *wrBad;
+
+  fillSgeWr(sg, wr, source, size, lkey);
+
+  wr.opcode = IBV_WR_SEND;
+
+  wr.wr.ud.ah = ah;
+  wr.wr.ud.remote_qpn = remoteQPN;
+  wr.wr.ud.remote_qkey = UD_PKEY;
+
+  if (isSignaled) wr.send_flags = IBV_SEND_SIGNALED;
   // printf("Before: send the message\n");
   if (ibv_post_send(qp, &wr, &wrBad)) {
     Debug::notifyError("Send with RDMA_SEND failed.");
@@ -100,7 +124,6 @@ bool rdmaSend(ibv_qp *qp, uint64_t source, uint64_t size, uint32_t lkey,
 // for RC & UC
 bool rdmaSend(ibv_qp *qp, uint64_t source, uint64_t size, uint32_t lkey,
               int32_t imm) {
-
   struct ibv_sge sg;
   struct ibv_send_wr wr;
   struct ibv_send_wr *wrBad;
@@ -140,7 +163,6 @@ bool rdmaReceive(ibv_qp *qp, uint64_t source, uint64_t size, uint32_t lkey,
 }
 
 bool rdmaReceive(ibv_srq *srq, uint64_t source, uint64_t size, uint32_t lkey) {
-
   struct ibv_sge sg;
   struct ibv_recv_wr wr;
   struct ibv_recv_wr *wrBad;
@@ -185,7 +207,6 @@ bool rdmaRead(ibv_qp *qp, uint64_t source, uint64_t dest, uint64_t size,
 bool rdmaWrite(ibv_qp *qp, uint64_t source, uint64_t dest, uint64_t size,
                uint32_t lkey, uint32_t remoteRKey, int32_t imm, bool isSignaled,
                uint64_t wrID) {
-
   struct ibv_sge sg;
   struct ibv_send_wr wr;
   struct ibv_send_wr *wrBad;
@@ -303,7 +324,8 @@ bool rdmaCompareAndSwap(ibv_qp *qp, uint64_t source, uint64_t dest,
 
 // bool rdmaCompareAndSwapMask(ibv_qp *qp, uint64_t source, uint64_t dest,
 //                             uint64_t compare, uint64_t swap, uint32_t lkey,
-//                             uint32_t remoteRKey, uint64_t mask, bool singal)
+//                             uint32_t remoteRKey, uint64_t mask, bool
+//                             singal)
 //                             {
 //   struct ibv_sge sg;
 //   struct ibv_send_wr wr;
@@ -375,7 +397,6 @@ bool rdmaReadBatch(ibv_qp *qp, RdmaOpRegion *ror, int k, bool isSignaled,
 
 bool rdmaWriteBatch(ibv_qp *qp, RdmaOpRegion *ror, int k, bool isSignaled,
                     uint64_t wrID) {
-
   struct ibv_sge sg[kOroMax];
   struct ibv_send_wr wr[kOroMax];
   struct ibv_send_wr *wrBad;
@@ -407,7 +428,6 @@ bool rdmaWriteBatch(ibv_qp *qp, RdmaOpRegion *ror, int k, bool isSignaled,
 bool rdmaCasRead(ibv_qp *qp, const RdmaOpRegion &cas_ror,
                  const RdmaOpRegion &read_ror, uint64_t compare, uint64_t swap,
                  bool isSignaled, uint64_t wrID) {
-
   struct ibv_sge sg[2];
   struct ibv_send_wr wr[2];
   struct ibv_send_wr *wrBad;
@@ -441,7 +461,6 @@ bool rdmaCasRead(ibv_qp *qp, const RdmaOpRegion &cas_ror,
 bool rdmaWriteFaa(ibv_qp *qp, const RdmaOpRegion &write_ror,
                   const RdmaOpRegion &faa_ror, uint64_t add_val,
                   bool isSignaled, uint64_t wrID) {
-
   struct ibv_sge sg[2];
   struct ibv_send_wr wr[2];
   struct ibv_send_wr *wrBad;
@@ -474,7 +493,6 @@ bool rdmaWriteFaa(ibv_qp *qp, const RdmaOpRegion &write_ror,
 bool rdmaWriteCas(ibv_qp *qp, const RdmaOpRegion &write_ror,
                   const RdmaOpRegion &cas_ror, uint64_t compare, uint64_t swap,
                   bool isSignaled, uint64_t wrID) {
-
   struct ibv_sge sg[2];
   struct ibv_send_wr wr[2];
   struct ibv_send_wr *wrBad;

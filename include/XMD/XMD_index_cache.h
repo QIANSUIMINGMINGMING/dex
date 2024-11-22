@@ -19,7 +19,8 @@
 #include "XMDnodewr.h"
 // #include "btree_node.h"
 // #include "latency_collector.h"
-// #include "node_wr.h"
+#include "../cache/node_wr.h"
+#include "../cache/leanstore_cache.h"
 
 namespace XMD {
 // FIXME(BT): these two variable is better to be included in the cache
@@ -531,7 +532,6 @@ class CacheManager {
     // Using range to check
     if (!new_check_limit_match(parent, target_node, child_idx)) {
       // target node
-      assert(false);
       {
         // XMD
         //  Check whether it is outdated
@@ -585,10 +585,10 @@ class CacheManager {
     if (!generator) generator = new std::mt19937(clock() + pthread_self());
     static thread_local std::uniform_int_distribution<uint64_t> distribution(
         0, 9999);
-    // auto idx = distribution(*generator);
-    // uint64_t admission_idx = 10000 * admission_rate_;
-    if (true) {
-        // if (true) { 
+    auto idx = distribution(*generator);
+    uint64_t admission_idx = 10000 * admission_rate_;
+    // if (cachepush::cache_allocator::get_state() == 1 && idx >= admission_idx) {
+      if (true) { 
       // Just read from remote and return to the application
       int ret = 1;
       switch (rpc_type) {
@@ -760,6 +760,7 @@ class CacheManager {
 
         // The following may happen because of SMO
         if (target_node->parent_ptr != target_parent) {
+          assert(false);
           target_parent->writeUnlock();
           target_node->writeUnlock();
           return false;

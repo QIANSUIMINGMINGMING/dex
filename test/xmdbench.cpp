@@ -1,6 +1,7 @@
 #include "Timer.h"
 // #include "Tree.h"
 #include <city.h>
+#include <libcgroup.h>
 #include <numa.h>
 #include <stdlib.h>
 #include <time.h>
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <condition_variable>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -19,6 +21,7 @@
 #include <vector>
 
 #include "../util/system.hpp"
+#include "XMD/BatchForest.h"
 #include "gaussian_generator.h"
 #include "sherman_wrapper.h"
 #include "smart/smart_wrapper.h"
@@ -26,7 +29,6 @@
 #include "uniform.h"
 #include "uniform_generator.h"
 #include "zipf.h"
-#include "XMD/BatchForest.h"
 
 // TODO bindCore
 namespace sherman {
@@ -35,7 +37,7 @@ extern uint64_t cache_miss[MAX_APP_THREAD][8];
 extern uint64_t cache_hit[MAX_APP_THREAD][8];
 
 }  // namespace sherman
-int kMaxThread = 32;
+int kMaxThread = MAX_APP_THREAD;
 // std::thread th[MAX_APP_THREAD];
 
 uint64_t latency[MAX_APP_THREAD][LATENCY_WINDOWS]{0};
@@ -45,6 +47,7 @@ uint64_t tp[MAX_APP_THREAD][8];
 // uint64_t total_tp[MAX_APP_THREAD];
 uint64_t total_time[MAX_APP_THREAD];
 
+int64_t kCPUPercentage = 10;
 std::mutex mtx;
 std::condition_variable cv;
 uint32_t kReadRatio;
@@ -291,7 +294,7 @@ void generate_workload() {
   }
   bulk_array = new uint64_t[bulk_load_num];
   uint64_t thread_warmup_insert_num =
-      (kInsertRatio / 100.0) * (op_num / totalThreadCount);
+      (kInsertRatio / 100.0) * (warmup_num / totalThreadCount);
   uint64_t warmup_insert_key_num = thread_warmup_insert_num * kThreadCount;
 
   uint64_t thread_workload_insert_num =
@@ -338,6 +341,9 @@ void generate_workload() {
       accumulated_bulk_num += bulk_num_per_node;
       if (left_b == left_bound) {
         insert_array = space_array + left_b + bulk_num_per_node;
+        std::cout << left_b << " " << bulk_num_per_node << " "
+                  << warmup_insert_key_num << " " << workload_insert_key_num
+                  << " " << right_b << std::endl;
         assert((left_b + bulk_num_per_node + warmup_insert_key_num +
                 workload_insert_key_num) <= right_b);
       }
@@ -353,7 +359,7 @@ void generate_workload() {
 
     uint64_t regular_node_insert_num =
         static_cast<uint64_t>(thread_warmup_insert_num * kMaxThread) +
-        static_cast<uint64_t>(workload_insert_key_num * kMaxThread);
+        static_cast<uint64_t>(thread_workload_insert_num * kMaxThread);
     insert_array =
         space_array + bulk_load_num + regular_node_insert_num * node_id;
     assert((bulk_load_num + regular_node_insert_num * node_id +
@@ -546,9 +552,17 @@ void generate_workload() {
   std::cout << "Finish all workload generation" << std::endl;
 }
 
+void dirthread_run(int dirID) {
+  bindCore(39 - dirID);
+  int i = 0;
+  while (true) {
+    i = i + 1;
+  }
+}
+
 void thread_run(int id) {
   // Interleave the thread binding
-  bindCore(id);
+  // bindCore(id);
   // numa_set_localalloc();
   //  std::cout << "Before register the thread" << std::endl;
   dsm->registerThread();
@@ -780,7 +794,7 @@ void thread_run(int id) {
 }
 
 void parse_args(int argc, char *argv[]) {
-  if (argc != 23) {
+  if (argc != 24) {
     printf("argc = %d\n", argc);
     printf(
         "Usage: ./benchmark kNodeCount kReadRatio kInsertRatio kUpdateRatio "
@@ -791,7 +805,8 @@ void parse_args(int argc, char *argv[]) {
         "check_correctness(0=no, 1=yes) time_based(0=no, "
         "1=yes) early_stop(0=no, 1=yes) "
         "index(0=cachepush, 1=sherman) rpc_rate admission_rate "
-        "auto_tune(0=false, 1=true) kMaxThread"
+        "auto_tune(0=false, 1=true) kMaxThread "
+        "cpu percentage"
         " \n");
     exit(-1);
   }
@@ -825,8 +840,8 @@ void parse_args(int argc, char *argv[]) {
   admission_rate = atof(argv[20]);  // Admission control ratio for DEX
   auto_tune = atoi(argv[21]);  // Whether needs the parameter tuning phase: run
                                // multiple times for a single operation
-
   kMaxThread = atoi(argv[22]);
+  kCPUPercentage = atoi(argv[23]);
   // How to make insert ready?
   kKeySpace = bulk_load_num +
               ceil((op_num + warmup_num) * (kInsertRatio / 100.0)) + 1000;
@@ -861,6 +876,11 @@ int main(int argc, char *argv[]) {
   numa_set_preferred(1);
   parse_args(argc, argv);
 
+  // std::thread overhead_th[NR_DIRECTORY];
+  // for (int i = 0; i < memThreadCount; i++) {
+  //   overhead_th[i] = std::thread( dirthread_run, i);
+  // }
+
   DSMConfig config;
   config.machineNR = kNodeCount;
   config.memThreadCount = memThreadCount;
@@ -888,6 +908,48 @@ int main(int argc, char *argv[]) {
   uint64_t total_cluster_tp = 0;
   uint64_t straggler_cluster_tp = 0;
   uint64_t collect_times = 0;
+
+  if (node_id == CNodeCount && CNodeCount != 1) {
+    std::string cgroup_name = "test_cpu_limit_group";
+    std::string cgroup_path = "/sys/fs/cgroup/" + cgroup_name;
+
+    // Step 1: Create the cgroup directory
+    if (!std::filesystem::exists(cgroup_path)) {
+      if (mkdir(cgroup_path.c_str(), 0755) != 0) {
+        std::cerr << "Failed to create cgroup directory: "
+                  << std::strerror(errno) << std::endl;
+        return 1;
+      }
+    }
+
+    // Step 2: Set the CPU limit in cpu.max
+    std::string cpu_max_file = cgroup_path + "/cpu.max";
+    std::ofstream cpu_max(cpu_max_file);
+    if (!cpu_max.is_open()) {
+      std::cerr << "Failed to open cpu.max: " << std::strerror(errno)
+                << std::endl;
+      return 1;
+    }
+
+    // Limit to k CPU usage (k * 100000 out of 100000 microseconds)
+    int64_t cpu_percentage_max = 100000;
+    int64_t quota = (kCPUPercentage * cpu_percentage_max) / 100;
+    // "quota cpu_percentage_max" means "quota out of cpu_percentage_max"
+    cpu_max << quota << " " << cpu_percentage_max;
+    cpu_max.close();
+
+    // Step 3: Add the current process to the cgroup
+    std::string cgroup_procs_file = cgroup_path + "/cgroup.procs";
+    std::ofstream cgroup_procs(cgroup_procs_file);
+    if (!cgroup_procs.is_open()) {
+      std::cerr << "Failed to open cgroup.procs: " << std::strerror(errno)
+                << std::endl;
+      return 1;
+    }
+
+    cgroup_procs << getpid();
+    cgroup_procs.close();
+  }
 
   if (node_id < CNodeCount) {
     dsm->registerThread();
@@ -1092,12 +1154,24 @@ int main(int argc, char *argv[]) {
       }
 
       tree->stop_batch_insert();
+      // for (int i = 0; i < memThreadCount; i ++) {
+      //   overhead_th[i].join();
+      // }
 
       // for (int i = 0; i < kThreadCount; ++i) {
       //   total_max_time = std::max_element(total_time, total_time + k)
       // }
       total_max_time = *std::max_element(total_time, total_time + kThreadCount);
-      total_cluster_max_time = dsm->max_total(total_max_time, CNodeCount);
+      if (workload_type == WorkLoadType::uniform ||
+          workload_type == WorkLoadType::zipf) {
+        total_cluster_max_time = total_max_time;
+      } else if (workload_type == WorkLoadType::gaussian_01 ||
+                 workload_type == WorkLoadType::gaussian_001) {
+        total_cluster_max_time = dsm->max_total(total_max_time, CNodeCount);
+      } else {
+        assert(false);
+      }
+      // total_cluster_max_time = dsm->max_total(total_max_time, CNodeCount);
       std::cout << "XMD node max time: " << total_max_time;
       std::cout << "XMD cluster max time: " << total_cluster_max_time;
 
@@ -1106,10 +1180,15 @@ int main(int argc, char *argv[]) {
           (static_cast<double>(total_cluster_max_time) / std::pow(10, 6));
       uint64_t XMDsetting_cluster_throughput =
           dsm->sum_total(XMDsetting_node_throughput, CNodeCount, false);
-      
 
-      std::cout << "XMD node throughput: " << (static_cast<double>(XMDsetting_node_throughput)/std::pow(10,6)) << " MOPS" << std::endl;
-      std::cout << "XMD cluster throughput: " << (static_cast<double>(XMDsetting_cluster_throughput)/std::pow(10,6)) <<" MOPS"<<std::endl;
+      std::cout << "XMD node throughput: "
+                << (static_cast<double>(XMDsetting_node_throughput) /
+                    std::pow(10, 6))
+                << " MOPS" << std::endl;
+      std::cout << "XMD cluster throughput: "
+                << (static_cast<double>(XMDsetting_cluster_throughput) /
+                    std::pow(10, 6))
+                << " MOPS" << std::endl;
 
       // uint64_t max_time = 0;
       // for (int i = 0; i < kThreadCount; ++i) {

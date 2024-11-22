@@ -4,12 +4,12 @@
 #define forceinline inline __attribute__((always_inline))
 
 #include <assert.h>
-#include <cstring>
 #include <infiniband/verbs.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <cstring>
 #include <list>
 #include <string>
 
@@ -93,6 +93,11 @@ bool modifyUDtoRTS(struct ibv_qp *qp, RdmaContext *context);
 //// Operation.cpp
 int pollWithCQ(ibv_cq *cq, int pollNumber, struct ibv_wc *wc);
 int pollOnce(ibv_cq *cq, int pollNumber, struct ibv_wc *wc);
+
+bool rdmaSolicitedSend(ibv_qp *qp, uint64_t source, uint64_t size,
+                       uint32_t lkey, ibv_ah *ah,
+                       uint32_t remoteQPN /* remote dct_number */,
+                       bool isSignaled);
 
 bool rdmaSend(ibv_qp *qp, uint64_t source, uint64_t size, uint32_t lkey,
               ibv_ah *ah, uint32_t remoteQPN, bool isSignaled = false);

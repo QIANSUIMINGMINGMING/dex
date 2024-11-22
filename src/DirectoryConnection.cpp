@@ -9,6 +9,7 @@ DirectoryConnection::DirectoryConnection(uint16_t dirID, void *dsmPool,
 
   createContext(&ctx);
   cq = ibv_create_cq(ctx.ctx, RAW_RECV_CQ_COUNT, NULL, NULL, 0);
+
   message = new RawMessageConnection(ctx, cq, DIR_MESSAGE_NR);
 
   message->initRecv();

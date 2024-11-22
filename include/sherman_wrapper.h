@@ -37,6 +37,9 @@ public:
   }
 
   int range_scan(T key, uint32_t num, std::pair<T, P> *&result) {
+    if (!my_tree->range_state) {
+      my_tree->range_state = true;
+    }
     T end_key =
         ((key + num) < key) ? std::numeric_limits<T>::max() : (key + num);
     return my_tree->range_query(key, end_key, result);

@@ -75,7 +75,7 @@
 #define DIR_MESSAGE_NR 512
 // }
 
-#define NR_DIRECTORY 4
+#define NR_DIRECTORY 1
 
 #define LOCK_VERSION 1
 
@@ -115,6 +115,58 @@ struct CoroContext {
 
 // constexpr uint64_t kMaxNumofInternalInsert = 5000;
 // }  // namespace define
+
+#include <errno.h>
+#include <pthread.h>
+#include <sched.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <cstring>
+#include <iostream>
+
+// 定义sched_attr结构
+struct sched_attr {
+  uint32_t size;
+
+  uint32_t sched_policy;
+  uint64_t sched_flags;
+
+  // SCHED_NORMAL, SCHED_BATCH
+  int32_t sched_nice;
+
+  // SCHED_FIFO, SCHED_RR
+  uint32_t sched_priority;
+
+  // SCHED_DEADLINE
+  uint64_t sched_runtime;
+  uint64_t sched_deadline;
+  uint64_t sched_period;
+};
+
+// 定义SCHED_DEADLINE的系统调用号
+#ifndef SYS_sched_setattr
+#if defined(__x86_64__)
+#define SYS_sched_setattr 314
+#define SYS_sched_getattr 315
+#elif defined(__i386__)
+#define SYS_sched_setattr 351
+#define SYS_sched_getattr 352
+#else
+#error "Unknown architecture"
+#endif
+#endif
+
+// 实现sched_setattr函数
+static int sched_setattr(pid_t pid, const struct sched_attr *attr,
+                         unsigned int flags);
+// 实现sched_getattr函数（可选，用于调试）
+static int sched_getattr(pid_t pid, struct sched_attr *attr, unsigned int size,
+                         unsigned int flags);
+
+int set_sched_deadline(pid_t pid, uint64_t runtime_ns, uint64_t deadline_ns,
+                       uint64_t period_ns);
 
 namespace define {
 

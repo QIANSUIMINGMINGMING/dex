@@ -46,20 +46,18 @@ Directory::~Directory() { delete chunckAlloc; }
 
 void Directory::dirThread() {
   // bindCore((19 - dirID) * 2);
-  bindCore(39 - dirID);
+  bindCore(MAX_APP_THREAD + dirID);
   Debug::notifyInfo("dir %d launch!\n", dirID);
 
   while (true) {
     struct ibv_wc wc;
-    pollWithCQ(dCon->cq, 1, &wc);
+    pollWithCQ(dCon->cq, 1, &wc);  //轮讯
     switch (int(wc.opcode)) {
     case IBV_WC_RECV: // control message
     {
       // printf("Dir receives a mesage\n");
       auto *m = (RawMessage *)dCon->message->getMessage();
-
       process_message(m);
-
       break;
     }
     case IBV_WC_RDMA_WRITE: {
@@ -78,6 +76,7 @@ void Directory::dirThread() {
 void Directory::process_message(const RawMessage *m) {
   // if (m->addr.nodeID != machineNR - 1) {
   //   printf("m node ID %llu", m->addr.nodeID);
+  //   std::cout << "I'm" << (int)nodeID << std::endl;
   // }
   RawMessage *send = nullptr;
   switch (m->type) {

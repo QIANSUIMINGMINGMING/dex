@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "epoch.h"
+#include "HugePageAlloc.h"
 
 /// Here we need to add a wrapper to invoke epoch managerment
 

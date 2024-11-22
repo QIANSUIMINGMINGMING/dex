@@ -88,6 +88,7 @@ public:
     entry_buffer =
         reinterpret_cast<uint64_t *>((char *)zero_64bit + sizeof(int64_t));
     *zero_64bit = 0;
+    // range_buffer = (char *)((char *)zero_64bit + sizeof(uint64_t) * kEntryBufferCnt + sizeof(int64_t));
     assert((char *)zero_64bit + 8 - buffer < define::kPerCoroRdmaBuf);
   }
 
@@ -122,6 +123,10 @@ public:
   char *get_page_buffer() {
     page_buffer_cur = (page_buffer_cur + 1) % kPageBufferCnt;
     return page_buffer + (page_buffer_cur * kPageSize);
+  }
+
+  char *get_range_buffer_sherman() {
+    return page_buffer;
   }
 
   // char *get_range_buffer() { return page_buffer; }
