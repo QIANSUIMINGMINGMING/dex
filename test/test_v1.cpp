@@ -490,7 +490,7 @@ static int run(void) {
     char *new_ip = (char *)malloc(16 * sizeof(char));
     sprintf(new_ip, "%d.%d.%d.%d", octet1, octet2, octet3, i);
     printf("New IP: %s\n", new_ip);
-    ret = get_addr(new_ip, (struct sockaddr *)&test.addrs[i - octet4].src_in);
+    ret = get_addr(new_ip, (struct sockaddr *)&test.addrs[i - octet4].dst_in);
   }
 
   if (ret) return ret;
