@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <string>
 
 struct rdma_event_channel *create_first_event_channel(void) {
   struct rdma_event_channel *channel;
@@ -24,13 +25,6 @@ struct rdma_event_channel *create_first_event_channel(void) {
   return channel;
 }
 
-struct test_addr {
-  struct sockaddr_storage dst_in;
-  struct sockaddr *dst_addr;
-  struct sockaddr_storage src_in;
-  struct sockaddr *src_addr;
-};
-
 struct cmatest_node {
   int id;
   struct rdma_cm_id *cma_id;
@@ -41,7 +35,6 @@ struct cmatest_node {
   struct ibv_ah *ah;
   uint32_t remote_qpn;
   uint32_t remote_qkey;
-  struct test_addr *myaddr_;
   void *mem;
 };
 
@@ -52,7 +45,15 @@ struct cmatest {
   int conn_index;
   int connects_left;
 
-  struct test_addr *addrs;
+  struct sockaddr_storage dst_in1;
+  struct sockaddr *dst_addr1;
+  struct sockaddr_storage src_in1;
+  struct sockaddr *src_addr1;
+
+  struct sockaddr_storage dst_in2;
+  struct sockaddr *dst_addr2;
+  struct sockaddr_storage src_in2;
+  struct sockaddr *src_addr2;
 };
 
 static struct cmatest test;
@@ -64,6 +65,7 @@ static int send_only;
 static int loopback = 1;
 static int unmapped_addr;
 static char *dst_addr;
+static char *dst_addr2;
 static char *src_addr;
 static enum rdma_port_space port_space = RDMA_PS_UDP;
 
@@ -212,7 +214,7 @@ static int post_sends(struct cmatest_node *node, int signal_flag) {
   send_wr.opcode = IBV_WR_SEND_WITH_IMM;
   send_wr.send_flags = signal_flag;
   send_wr.wr_id = (unsigned long)node;
-  send_wr.imm_data = htobe32(node->id);
+  send_wr.imm_data = htobe32(node->cma_id->qp->qp_num);
 
   send_wr.wr.ud.ah = node->ah;
   send_wr.wr.ud.remote_qpn = node->remote_qpn;
@@ -232,6 +234,7 @@ static int post_sends(struct cmatest_node *node, int signal_flag) {
 static void connect_error(void) { test.connects_left--; }
 
 static int addr_handler(struct cmatest_node *node) {
+
   int ret;
   struct rdma_cm_join_mc_attr_ex mc_attr;
 
@@ -248,8 +251,11 @@ static int addr_handler(struct cmatest_node *node) {
 
   mc_attr.comp_mask =
       RDMA_CM_JOIN_MC_ATTR_ADDRESS | RDMA_CM_JOIN_MC_ATTR_JOIN_FLAGS;
-  // mc_attr.addr = test.dst_addr;
-  mc_attr.addr = node->myaddr_->dst_addr;
+  if (node->id == 0) {
+    mc_attr.addr = test.dst_addr1;
+  } else {
+    mc_attr.addr = test.dst_addr2;
+  }
   mc_attr.join_flags = send_only ? RDMA_MC_JOIN_FLAG_SENDONLY_FULLMEMBER
                                  : RDMA_MC_JOIN_FLAG_FULLMEMBER;
 
@@ -375,7 +381,6 @@ static int alloc_nodes(void) {
 
   for (i = 0; i < connections; i++) {
     test.nodes[i].id = i;
-    test.nodes[i].myaddr_ = &test.addrs[i];
     ret = rdma_create_id(test.channel, &test.nodes[i].cma_id, &test.nodes[i],
                          port_space);
     if (ret) goto err;
@@ -408,8 +413,6 @@ static int poll_cqs(void) {
         return ret;
       }
     }
-
-    printf("connection: %d received\n");
   }
   return 0;
 }
@@ -461,44 +464,24 @@ static int run(void) {
   int i, ret;
 
   printf("mckey: starting %s\n", is_sender ? "client" : "server");
-  int octet1, octet2, octet3, octet4;
   if (src_addr) {
-    // ret = get_addr(src_addr, (struct sockaddr *)&test.src_in);
-    if (sscanf(src_addr, "%d.%d.%d.%d", &octet1, &octet2, &octet3, &octet4) !=
-        4) {
-      fprintf(stderr, "Invalid src IP address format.\n");
-      exit(EXIT_FAILURE);
-    }
-
-    for (int i = octet4; i < connections + octet4; i++) {
-      char *new_ip = (char *)malloc(16 * sizeof(char));
-      sprintf(new_ip, "%d.%d.%d.%d", octet1, octet2, octet3, i);
-      printf("New IP: %s\n", new_ip);
-      ret = get_addr(new_ip, (struct sockaddr *)&test.addrs[i - octet4].src_in);
-    }
-
+    ret = get_addr(src_addr, (struct sockaddr *)&test.src_in1);
+    ret = get_addr(src_addr, (struct sockaddr *)&test.src_in2);
     if (ret) return ret;
   }
 
-  if (sscanf(dst_addr, "%d.%d.%d.%d", &octet1, &octet2, &octet3, &octet4) !=
-      4) {
-    fprintf(stderr, "Invalid dst IP address format.\n");
-    exit(EXIT_FAILURE);
-  }
-  //ret = get_dst_addr(dst_addr, (struct sockaddr *)&test.dst_in);
-  for (int i = octet4; i < connections + octet4; i++) {
-    char *new_ip = (char *)malloc(16 * sizeof(char));
-    sprintf(new_ip, "%d.%d.%d.%d", octet1, octet2, octet3, i);
-    printf("New IP: %s\n", new_ip);
-    ret = get_addr(new_ip, (struct sockaddr *)&test.addrs[i - octet4].dst_in);
-  }
-
+  ret = get_dst_addr(dst_addr, (struct sockaddr *)&test.dst_in1);
+  ret = get_dst_addr(dst_addr2, (struct sockaddr *)&test.dst_in2);
   if (ret) return ret;
 
   printf("mckey: joining\n");
   for (i = 0; i < connections; i++) {
     if (src_addr) {
-      ret = rdma_bind_addr(test.nodes[i].cma_id, test.addrs[i].src_addr);
+      if (i == 0) {
+        ret = rdma_bind_addr(test.nodes[i].cma_id, test.src_addr1);
+      } else {
+        ret = rdma_bind_addr(test.nodes[i].cma_id, test.src_addr2);
+      }
       if (ret) {
         perror("mckey: addr bind failure");
         connect_error();
@@ -509,8 +492,15 @@ static int run(void) {
     if (unmapped_addr)
       ret = addr_handler(&test.nodes[i]);
     else
-      ret = rdma_resolve_addr(test.nodes[i].cma_id, test.addrs[i].src_addr,
-                              test.addrs[i].dst_addr, 2000);
+      if (i == 0) {
+        ret = rdma_resolve_addr(test.nodes[i].cma_id, test.src_addr1,
+                                test.dst_addr1, 2000);
+      } else {
+        ret = rdma_resolve_addr(test.nodes[i].cma_id, test.src_addr2,
+                                test.dst_addr2, 2000);
+      }
+      // ret = rdma_resolve_addr(test.nodes[i].cma_id, test.src_addr,
+      //                         test.dst_addr, 2000);
     if (ret) {
       perror("mckey: resolve addr failure");
       connect_error();
@@ -545,7 +535,12 @@ static int run(void) {
   }
 out:
   for (i = 0; i < connections; i++) {
-    ret = rdma_leave_multicast(test.nodes[i].cma_id, test.addrs[i].dst_addr);
+    if (i == 0) {
+      ret = rdma_leave_multicast(test.nodes[i].cma_id, test.dst_addr1);
+    } else {
+      ret = rdma_leave_multicast(test.nodes[i].cma_id, test.dst_addr2);
+    }
+    // ret = rdma_leave_multicast(test.nodes[i].cma_id, test.dst_addr);
     if (ret) perror("mckey: failure leaving");
   }
   return ret;
@@ -554,8 +549,11 @@ out:
 int main(int argc, char **argv) {
   int op, ret;
 
-  while ((op = getopt(argc, argv, "m:M:sb:c:C:S:p:ol")) != -1) {
+  while ((op = getopt(argc, argv, "t:m:M:sb:c:C:S:p:ol")) != -1) {
     switch (op) {
+      case 't':
+        dst_addr2 = optarg;
+        break;
       case 'm':
         dst_addr = optarg;
         break;
@@ -568,7 +566,8 @@ int main(int argc, char **argv) {
         break;
       case 'b':
         src_addr = optarg;
-        // test.src_addr = (struct sockaddr *)&test.src_in;
+        test.src_addr1 = (struct sockaddr *)&test.src_in1;
+        test.src_addr2 = (struct sockaddr *)&test.src_in2;
         break;
       case 'c':
         connections = atoi(optarg);
@@ -617,17 +616,8 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  test.addrs = (test_addr *)malloc(sizeof(struct test_addr) * connections);
-
-  for (int i = 0; i < connections; i++) {
-    test.addrs[i].dst_addr = (struct sockaddr *)&test.addrs[i].dst_in;
-  }
-
-  for (int i = 0; i < connections; i++) {
-    test.addrs[i].src_addr = (struct sockaddr *)&test.addrs[i].src_in;
-  }
-
-  // test.dst_addr = (struct sockaddr *)&test.dst_in;
+  test.dst_addr1 = (struct sockaddr *)&test.dst_in1;
+  test.dst_addr2 = (struct sockaddr *)&test.dst_in2;
   test.connects_left = connections;
 
   test.channel = create_first_event_channel();
