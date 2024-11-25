@@ -239,6 +239,7 @@ class TransferObjBuffer {
       next_buffer_field->psn = cur_psn;
       cur_psn++;
       my_cm_->send_message(node_send_pos);
+      std::cout << "send one" << std::endl;
 
       // update buffer fields
       bool need_restart = false;

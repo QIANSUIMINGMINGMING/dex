@@ -67,7 +67,7 @@ int verify_port(struct multicast_node *node) {
 multicastCM::multicastCM(DSM *dsm, uint64_t buffer_size, std::string mc_ip)
     : cnode_id(dsm->getMyNodeID()),
       mcIp(mc_ip),
-      mcGroups(1),
+      mcGroups(10),
       mbr(buffer_size * 1024 * 1024 * 1024) {
   connects_left = mcGroups;
   if (alloc_nodes(mcGroups)) exit(1);

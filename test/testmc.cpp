@@ -1,7 +1,6 @@
 #include <city.h>
 
 #include "XMD/mc_agent.h"
-#include "XMD/mc_agent_v1.h"
 #include "zipf.h"
 
 // parameters
