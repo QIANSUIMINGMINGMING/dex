@@ -434,8 +434,12 @@ int multicastCM::get_pos(TransferObj *&next_message_address) {
 int multicastCM::send_message(int pos) {
   struct ibv_send_wr *bad_send_wr;
   ibv_send_wr *send_wr = &node->send_wr[pos];
+  static bool start_poll = false;
   ibv_sge *sge = &(node->send_sgl[pos]);
-  if (pos % (kMcMaxPostList / 2) == 1) {
+  if (pos > 0 && pos % (kMcMaxPostList / 2) == 0) {
+    start_poll = true;
+  }
+  if (pos % (kMcMaxPostList / 2) == 0 && start_poll) {
     struct ibv_wc wc;
     pollWithCQ(node->send_cq, kMcMaxPostList / 2, &wc);
   }
