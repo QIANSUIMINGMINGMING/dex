@@ -412,6 +412,7 @@ static int poll_cqs(void) {
         printf("mckey: failed polling CQ: %d\n", ret);
         return ret;
       }
+      printf("polled from cq %d\n", i);
     }
   }
   return 0;
@@ -522,7 +523,7 @@ static int run(void) {
   if (message_count) {
     if (is_sender) {
       printf("initiating data transfers\n");
-      for (i = 0; i < connections; i++) {
+      for (i = 1; i < connections; i++) {
         ret = post_sends(&test.nodes[i], 0);
         if (ret) goto out;
       }
