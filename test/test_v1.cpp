@@ -411,9 +411,9 @@ static int poll_cqs(void) {
       if (ret < 0) {
         printf("mckey: failed polling CQ: %d\n", ret);
         return ret;
-      }
-      printf("polled from cq %d\n", i);
+      } 
     }
+    printf("polled from cq %d\n", i);
   }
   return 0;
 }
