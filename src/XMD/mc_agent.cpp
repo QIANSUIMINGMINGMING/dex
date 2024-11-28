@@ -427,14 +427,14 @@ int multicastCM::send_message(int node_id, int pos) {
   multicast_node *node = nodes[node_id];
   struct ibv_send_wr *bad_send_wr;
   ibv_send_wr *send_wr = &node->send_wr[pos];
-  static bool start_poll = false;
+  // static bool start_poll = false;
   ibv_sge *sge = &(node->send_sgl[pos]);
-  if (pos > 0 && pos % (kMcMaxPostList / 2) == 0) {
-    start_poll = true;
-  }
-  if (pos % (kMcMaxPostList / 2) == 0 && start_poll) {
+  // if (pos > 0 && pos % (kMcMaxPostList / 2) == 0) {
+  //   start_poll = true;
+  // }
+  if (pos % (kMcMaxPostList / 2) == 1) {
     struct ibv_wc wc;
-    pollWithCQ(node->send_cq, kMcMaxPostList / 2, &wc);
+    pollWithCQ(node->send_cq, 1, &wc);
   }
   sge->addr = (uint64_t)node->send_messages + pos * kMcPageSize;
   int ret = ibv_post_send(node->cma_id->qp, send_wr, &bad_send_wr);
