@@ -426,7 +426,7 @@ int multicastCM::get_pos(int node_id, TransferObj *&next_message_address) {
 int multicastCM::send_message(int node_id, int pos) {
   multicast_node *node = nodes[node_id];
   struct ibv_send_wr *bad_send_wr;
-  ibv_send_wr *send_wr = &node->send_wr[pos];
+  ibv_send_wr *send_wr = &(node->send_wr[pos]);
   // static bool start_poll = false;
   ibv_sge *sge = &(node->send_sgl[pos]);
   // if (pos > 0 && pos % (kMcMaxPostList / 2) == 0) {

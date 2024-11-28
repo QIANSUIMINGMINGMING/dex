@@ -11,8 +11,9 @@ double kReadRatio = 50;
 XMD::multicast::multicastCM *mcm;
 
 std::thread th[MAX_APP_THREAD];
+std::thread recv_thread;
 
-constexpr uint64_t psn_numbers = 1;
+constexpr uint64_t psn_numbers = 100;
 
 std::atomic<uint64_t> recv_psn;
 
@@ -64,9 +65,9 @@ int main(int argc, char **argv) {
          XMD::multicast::kMcCardinality);
 
   DSMConfig config;
-  config.machineNR = 2;
+  config.machineNR = 1;
   config.memThreadCount = 1;
-  config.computeNR = 2;
+  config.computeNR = 1;
   config.index_type = 3;
   DSM *dsm = DSM::getInstance(config);
 
@@ -77,6 +78,7 @@ int main(int argc, char **argv) {
   dsm->barrier("init-mc");
 
   tob = new XMD::multicast::TransferObjBuffer(mcm, 0);
+  recv_thread = std::thread(XMD::multicast::TransferObjBuffer::fetch_thread_run, tob);
 
   dsm->barrier("init-recv");
 

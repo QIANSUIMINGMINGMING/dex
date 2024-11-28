@@ -432,7 +432,7 @@ constexpr uint32_t kLeafPageSize = 1024;
 #if defined(SINGLE_KEY)
 constexpr uint32_t kMcPageSize = 1024;
 #elif defined(KEY_PAGE)
-constexpr uint32_t kMcPageSize = 4096 - sizeof(struct ibv_grh);
+constexpr uint32_t kMcPageSize = 2048 - sizeof(struct ibv_grh);
 #elif defined(FILTER_PAGE)
 constexpr uint32_t kMcPageSize = 1024
 #endif

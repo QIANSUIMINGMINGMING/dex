@@ -116,6 +116,7 @@ class multicastCM {
       nodes[i]->print_self();
     }
   }
+  
   int getGroupSize() { return mcGroups; }
 
  private:
@@ -189,7 +190,7 @@ class TransferObjBuffer {
   TransferObj *buffer_;
   TransferObj * recv_buffer_;
   TransferObj recv_buffer_for_test[1000];
-  std::thread fetch_thread;
+  // std::thread fetch_thread;
 
   std::atomic<uint64_t> ready_to_send{0};
   inline static thread_local bool pause_flag = false;
@@ -200,8 +201,7 @@ class TransferObjBuffer {
     cur_pos = my_cm_->get_pos(thread_group_id, buffer_);
     buffer_->node_id = my_cm_->get_cnode_id();
     buffer_->psn = global_psn.fetch_add(1);
-    recv_buffer_ = new TransferObj();
-    fetch_thread = std::thread(fetch_thread_run, this);
+    recv_buffer_ = new TransferObj(); 
   }
 
   //test
@@ -213,7 +213,6 @@ class TransferObjBuffer {
   }
 
   ~TransferObjBuffer() {
-    fetch_thread.join();
     delete recv_buffer_;
   }
 
@@ -223,6 +222,7 @@ class TransferObjBuffer {
       // tob->my_cm_->fetch_message(multicast_node_id, tob->recv_buffer_);
       tob->my_cm_->fetch_message(multicast_node_id, &(tob->recv_buffer_[tob->recv_messages_num]));
       tob->recv_messages_num++;
+      printf("one receive\n");
     }
     // tob->my_cm_->fetch_message(m, tob->buffer_);
   }
