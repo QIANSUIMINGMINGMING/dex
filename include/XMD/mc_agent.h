@@ -187,19 +187,45 @@ class TransferObjBuffer {
       kMcCardinality - default_thread_num * per_thread_occupy;
   std::atomic<uint64_t> cur_element_num_in_concurrency{0};
   TransferObj *buffer_;
+  TransferObj * recv_buffer_;
+  TransferObj recv_buffer_for_test[1000];
+  std::thread fetch_thread;
 
   std::atomic<uint64_t> ready_to_send{0};
   inline static thread_local bool pause_flag = false;
-
-  TransferObjBuffer(multicastCM *cm, int thread_group_id, int thread_num)
+  int recv_messages_num{0};
+  TransferObjBuffer(multicastCM *cm, int thread_group_id)
       : my_cm_(cm) {
     cm_node_ = my_cm_->getNode(thread_group_id);
     cur_pos = my_cm_->get_pos(thread_group_id, buffer_);
     buffer_->node_id = my_cm_->get_cnode_id();
     buffer_->psn = global_psn.fetch_add(1);
+    recv_buffer_ = new TransferObj();
+    fetch_thread = std::thread(fetch_thread_run, this);
   }
 
-  ~TransferObjBuffer() {}
+  //test
+  void print_recv() {
+    int print_num = std::min(recv_messages_num, 20);
+    for (int i = 0; i < print_num; i++) {
+      printTransferObj(recv_buffer_[i]);
+    }
+  }
+
+  ~TransferObjBuffer() {
+    fetch_thread.join();
+    delete recv_buffer_;
+  }
+
+  static void fetch_thread_run(TransferObjBuffer *tob) {
+    int multicast_node_id = tob->cm_node_->id;
+    while (true) {
+      // tob->my_cm_->fetch_message(multicast_node_id, tob->recv_buffer_);
+      tob->my_cm_->fetch_message(multicast_node_id, &(tob->recv_buffer_[tob->recv_messages_num]));
+      tob->recv_messages_num++;
+    }
+    // tob->my_cm_->fetch_message(m, tob->buffer_);
+  }
 
   void packKVTS(const KVTS &kvts, int thread_id) {
     while (pause_flag && ready_to_send.load() != 0) {
@@ -247,67 +273,6 @@ class TransferObjBuffer {
     }
   }
 };
-
-//   bool can_go(uint64_t pos) {
-//   int restartCount = 0;
-// restart:
-//   if (restartCount++) yield(restartCount);
-//   bool need_restart = false;
-//   cutil::ull_t cur_v = cutil::read_lock_or_restart(buffer_mutex,
-//   need_restart); if (need_restart) {
-//     goto restart;
-//   }
-//   bool can_go = pos < maxSeqN;
-//   cutil::read_unlock_or_restart(buffer_mutex, cur_v, need_restart);
-//   if (need_restart) {
-//     goto restart;
-//   }
-//   return can_go;
-// }
-
-// void sendBuffers() {
-//   while (true) {
-//     int buf_idx = active_buffer_;
-//     // wait conditional variable and send buffer_[active_buffer_], you do
-//     not
-//         // need to care rdma_Send
-//         while (buffer_full_cv[buf_idx].load() == 0) {
-//       yield(1);
-//     }
-
-//     TransferObj *next_buffer_field;
-//     int node_send_pos = my_cm_->get_pos(next_buffer_field);
-//     next_buffer_field->node_id = my_cm_->get_cnode_id();
-//     next_buffer_field->psn = cur_psn;
-//     cur_psn++;
-//     my_cm_->send_message(node_send_pos);
-//     std::cout << "send one" << std::endl;
-
-//     // update buffer fields
-//     bool need_restart = false;
-//     cutil::ull_t cur_v =
-//         cutil::read_lock_or_restart(buffer_mutex, need_restart);
-//     if (need_restart) {
-//       assert(false);
-//     }
-//     cutil::upgrade_to_write_lock_or_restart(buffer_mutex, cur_v,
-//     need_restart); if (need_restart) {
-//       assert(false);
-//     }
-
-//     buffers_[active_buffer_] = next_buffer_field;
-//     buffer_element_count[active_buffer_].store(0);
-//     buffer_start_seqn[active_buffer_] = maxSeqN;
-//     maxSeqN += kMcCardinality;
-
-//     active_buffer_ = RING_ADD(active_buffer_, 1, BUFFER_SIZE);
-
-//     cutil::write_unlock(buffer_mutex);
-//     // then change active_buffer_ to next
-//     // Then modify the maxSeqN and other corresponding fields
-//   }
-// }
-// };
 
 };  // namespace multicast
 };  // namespace XMD

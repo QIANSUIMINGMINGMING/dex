@@ -169,39 +169,6 @@ int multicastCM::alloc_nodes() {
       }
     }
   }
-
-  // node->id = 0;
-  // node->dst_addr = (struct sockaddr *)&node->dst_in;
-  // ret = get_addr(mcIp, (struct sockaddr *)&node->dst_in);
-  // if (ret) {
-  //   fprintf(stderr, "failed to get destination address\n");
-  //   return ret;
-  // }
-  // node->channel = create_first_event_channel();
-  // if (!node->channel) {
-  //   fprintf(stderr, "failed to create RDMA CM event channel\n");
-  //   return -1;
-  // }
-  // ret = rdma_create_id(node->channel, &node->cma_id, node, RDMA_PS_UDP);
-  // if (ret) {
-  //   fprintf(stderr, "failed to create RDMA CM ID\n");
-  //   return ret;
-  // }
-  // ret = rdma_resolve_addr(node->cma_id, NULL, node->dst_addr, 2000);
-  // if (ret) {
-  //   perror("mckey: resolve addr failure");
-  //   return ret;
-  // }
-  // struct rdma_cm_event *event;
-
-  // while (!node->connected && !ret) {
-  //   ret = rdma_get_cm_event(node->channel, &event);
-  //   if (!ret) {
-  //     ret = cma_handler(event->id, event);
-  //     rdma_ack_cm_event(event);
-  //   }
-  // }
-
   return ret;
 }
 

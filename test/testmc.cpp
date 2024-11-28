@@ -12,16 +12,14 @@ XMD::multicast::multicastCM *mcm;
 
 std::thread th[MAX_APP_THREAD];
 
-constexpr uint64_t psn_numbers = 20;
+constexpr uint64_t psn_numbers = 100;
 
-XMD::multicast::TransferObj recv_objs[psn_numbers];
 std::atomic<uint64_t> recv_psn;
 
 // std::unique_ptr<XMD::multicast::TransferObjBuffer> tob;
 XMD::multicast::TransferObjBuffer* tob;
 
-int send_thread_num = 1;
-int recv_thread_num = 1;
+int send_thread_num = XMD::multicast::TransferObjBuffer::default_thread_num;
 
 struct Request {
   bool is_search;
@@ -31,17 +29,6 @@ struct Request {
 
 inline Key to_key(uint64_t k) {
   return (CityHash64((char *)&k, sizeof(k)) + 1) % kKeySpace;
-}
-
-void recv_thread_run(int id) {
-  bindCore(id + XMD::multicastSendCore);
-  while (true) {
-    int this_psn = recv_psn.fetch_add(1);
-    if (this_psn >= psn_numbers) {
-      break;
-    }
-    mcm->fetch_message(&recv_objs[this_psn]);
-  }
 }
 
 void thread_run(int id) {
@@ -63,7 +50,8 @@ void thread_run(int id) {
       v = 23;
       TS ts = XMD::myClock::get_ts();
       // tob->insert(key, ts, v, tob_pos);
-      tob->packKVTS(XMD::KVTS(key, ts, v));
+      tob->packKVTS(XMD::KVTS(key, ts, v), id);
+      // tob->packKVTS(XMD::KVTS(key, ts, v));
     }
     i++;
   }
@@ -82,35 +70,29 @@ int main(int argc, char **argv) {
   config.index_type = 3;
   DSM *dsm = DSM::getInstance(config);
 
-  mcm = new XMD::multicast::multicastCM(dsm);
+  mcm = new XMD::multicast::multicastCM(dsm, 1);
   mcm->print_self();
   // mcm2 = std::make_unique<rdmacm::multicast::multicastCM>(dsm);
 
   dsm->barrier("init-mc");
 
-  tob = new XMD::multicast::TransferObjBuffer(mcm);
-
-  std::thread emit_thread(&XMD::multicast::TransferObjBuffer::sendBuffers, tob);
-
-  for (int i = 0; i < recv_thread_num; i ++) {
-    th[i] = std::thread(recv_thread_run, i);
-  }
+  tob = new XMD::multicast::TransferObjBuffer(mcm, 0);
 
   dsm->barrier("init-recv");
 
   for (int i = 0; i < send_thread_num; i++) {
-    th[i+recv_thread_num] = std::thread(thread_run, i);
+    th[i] = std::thread(thread_run, i);
   }
 
-  for (int i = 0; i < recv_thread_num + send_thread_num; i++) {
+  for (int i = 0; i < send_thread_num; i++) {
     th[i].join();
   }
 
-  emit_thread.join();
+  tob->print_recv();
 
-  for (int i = 0;i< psn_numbers;i++) {
-    XMD::multicast::printTransferObj(recv_objs[i]);
-  }
+  // for (int i = 0;i< psn_numbers;i++) {
+  //   XMD::multicast::printTransferObj(recv_objs[i]);
+  // }
   // for (int i = 0; i < kMaxMulticastSendCoreNum; i++) {
   //   th[i].join();
   // }
