@@ -8,8 +8,6 @@ uint64_t kKeySpace = 64 * define::MB;
 double zipfan = 0;
 double kReadRatio = 50;
 
-// std::unique_ptr<XMD::multicast::multicastCM> mcm;
-// std::unique_ptr<rdmacm::multicast::multicastCM> mcm2;
 XMD::multicast::multicastCM *mcm;
 
 std::thread th[MAX_APP_THREAD];

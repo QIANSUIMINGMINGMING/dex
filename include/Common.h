@@ -457,9 +457,9 @@ constexpr uint16_t rate_limit_core =
     multicastSendCore + kMaxMulticastSendCoreNum;
 
 // for Rpc
-constexpr int kMcMaxPostList = 128;
+constexpr int kMcMaxPostList = 32;
 constexpr int kMcMaxRecvPostList = (MAX_MACHINE - 1) * kMcMaxPostList;
-constexpr int kpostlist = 32;
+constexpr int kpostlist = 8;
 
 __inline__ unsigned long long rdtsc(void) {
   unsigned hi, lo;

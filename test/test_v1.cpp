@@ -523,7 +523,7 @@ static int run(void) {
   if (message_count) {
     if (is_sender) {
       printf("initiating data transfers\n");
-      for (i = 1; i < connections; i++) {
+      for (i = 0; i < connections-1; i++) {
         ret = post_sends(&test.nodes[i], 0);
         if (ret) goto out;
       }

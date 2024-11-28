@@ -1,39 +1,8 @@
 #include "XMD/mc_agent.h"
 
-// DEFINE_double(
-//     rdmaMemoryFactor, 1.1,
-//     "Factor to be multiplied by dramGB");  // factor to be multiplied by
-//     dramGB
-// DEFINE_uint32(port, 20886, "port");
-// DEFINE_uint32(mcport, 20887, "mcport");
+#include <stdlib.h>
 
-// DEFINE_string(ownIp, "172.18.94.80", "own IP server");
-// DEFINE_string(mcIp, "226.0.0.1", "multicast group IP");
-// DEFINE_uint32(mcGroups, 10, "multicast group number");
-
-// DEFINE_bool(storageNode, false, "storage node");
-// DEFINE_uint64(storageNodes, 1, "Number storage nodes participating");
-
-// DEFINE_double(dramGB, 1, "DRAM buffer pool size");
-
-// DEFINE_uint64(computeNodes, 2, "Number compute nodes participating");
-
-// DEFINE_uint64(worker, 1, "Number worker threads");
-
-// DEFINE_string(memcachedIp, "10.16.70.16", "memcached server Ip");
-// DEFINE_uint32(memcachedPort, 2378, "memcached server port");
-
-// DEFINE_bool(testmachineOn, false, "leafcache or not on test machine");
-
-// DEFINE_uint32(nodeId, 0, "");
-// DEFINE_uint64(cnodeId, 0, "node id for compute nodes");
-// DEFINE_uint64(all_worker, 1,
-//               "number of all worker threads in the cluster for barrier");
-// DEFINE_bool(mcIsSender, false, "cmIsSender");
-// DEFINE_int32(internalPageSize, 1024, "internal page size");
-// DEFINE_int32(leafPageSize, 1024, "leaf page size");
-// DEFINE_int32(KVCacheSize, 1024 * 1024 * 256, "KV Cache Size B");
-// DEFINE_bool(usingStringKey, false, "using string keys");
+#include <cstdlib>
 
 namespace XMD {
 namespace multicast {
@@ -115,68 +84,123 @@ int verify_port(struct multicast_node *node) {
   return 0;
 }
 
-multicastCM::multicastCM(DSM *dsm, u64 buffer_size, std::string mc_ip)
+multicastCM::multicastCM(DSM *dsm, int group_size, u64 buffer_size,
+                         std::string mc_ip)
     : dsm_(dsm),
       cnode_id(dsm->getMyNodeID()),
       mcIp(mc_ip),
+      mcGroups(group_size),
       mbr(buffer_size * 1024 * 1024 * 1024) {
   if (alloc_nodes()) exit(1);
 
-  pthread_create(&cmathread, NULL, cma_thread_worker, node);
+  pthread_create(&cmathread, NULL, cma_thread_manager, this);
+
+  // pthread_create(&cmathread, NULL, cma_thread_worker, node);
   /*
    * Pause to give SM chance to configure switches.  We don't want to
    * handle reliability issue in this simple test program.
    */
   sleep(5);
   // recv maintainer
-  maintainer = std::thread(mc_maintainer, dsm_, this);
+  for (int i = 0; i < mcGroups; i++) {
+    maintainers[i] = std::thread(mc_maintainer, dsm_, i, this);
+  }
+  // maintainer = std::thread(mc_maintainer, dsm_, this);
   sleep(5);
 
   dsm->barrier("create_multicast_agent1", dsm->getComputeNum());
 };
 
-multicastCM::~multicastCM() { destroy_node(node); }
+multicastCM::~multicastCM() {
+  for (size_t i = 0; i < mcGroups; i++) {
+    /* code */
+    destroy_node(nodes[i]);
+  }
+}
 
-int multicastCM::alloc_nodes(int connections) {
+int multicastCM::alloc_nodes() {
   int ret;
-  node = (multicast_node *)mbr.allocate(sizeof(struct multicast_node) *
-                                        connections);
-  if (!node) {
-    fprintf(stderr, "failed to allocate memory for test nodes\n");
-    return -ENOMEM;
-  }
-
-  node->id = 0;
-  node->dst_addr = (struct sockaddr *)&node->dst_in;
-  ret = get_addr(mcIp, (struct sockaddr *)&node->dst_in);
-  if (ret) {
-    fprintf(stderr, "failed to get destination address\n");
-    return ret;
-  }
-  node->channel = create_first_event_channel();
-  if (!node->channel) {
-    fprintf(stderr, "failed to create RDMA CM event channel\n");
-    return -1;
-  }
-  ret = rdma_create_id(node->channel, &node->cma_id, node, RDMA_PS_UDP);
-  if (ret) {
-    fprintf(stderr, "failed to create RDMA CM ID\n");
-    return ret;
-  }
-  ret = rdma_resolve_addr(node->cma_id, NULL, node->dst_addr, 2000);
-  if (ret) {
-    perror("mckey: resolve addr failure");
-    return ret;
-  }
-  struct rdma_cm_event *event;
-
-  while (!node->connected && !ret) {
-    ret = rdma_get_cm_event(node->channel, &event);
-    if (!ret) {
-      ret = cma_handler(event->id, event);
-      rdma_ack_cm_event(event);
+  for (int i = 0; i < mcGroups; i++) {
+    nodes[i] = new multicast_node;
+    if (!nodes[i]) {
+      fprintf(stderr, "failed to allocate memory for test nodes\n");
+      return -ENOMEM;
     }
   }
+
+  for (int i = 0; i < mcGroups; i++) {
+    nodes[i]->id = i;
+    nodes[i]->dst_addr = (struct sockaddr *)&nodes[i]->dst_in;
+
+    std::string nodeMcIp = mcIp;
+    std::string::size_type pos = nodeMcIp.find_last_of(".");
+    nodeMcIp = nodeMcIp.substr(0, pos + 1);
+    nodeMcIp += std::to_string(i + 1);
+    ret = get_addr(nodeMcIp, (struct sockaddr *)&nodes[i]->dst_in);
+    if (ret) {
+      fprintf(stderr, "failed to get destination address\n");
+      return ret;
+    }
+
+    nodes[i]->channel = create_first_event_channel();
+    if (!nodes[i]->channel) {
+      fprintf(stderr, "failed to create RDMA CM event channel\n");
+      return -1;
+    }
+    ret = rdma_create_id(nodes[i]->channel, &nodes[i]->cma_id, &nodes[i],
+                         RDMA_PS_UDP);
+    if (ret) {
+      fprintf(stderr, "failed to create RDMA CM ID\n");
+      return ret;
+    }
+    ret = rdma_resolve_addr(nodes[i]->cma_id, NULL, nodes[i]->dst_addr, 2000);
+    if (ret) {
+      perror("mckey: resolve addr failure");
+      return ret;
+    }
+
+    struct rdma_cm_event *event;
+
+    while (!nodes[i]->connected && !ret) {
+      ret = rdma_get_cm_event(nodes[i]->channel, &event);
+      if (!ret) {
+        ret = cma_handler(event->id, event);
+        rdma_ack_cm_event(event);
+      }
+    }
+  }
+
+  // node->id = 0;
+  // node->dst_addr = (struct sockaddr *)&node->dst_in;
+  // ret = get_addr(mcIp, (struct sockaddr *)&node->dst_in);
+  // if (ret) {
+  //   fprintf(stderr, "failed to get destination address\n");
+  //   return ret;
+  // }
+  // node->channel = create_first_event_channel();
+  // if (!node->channel) {
+  //   fprintf(stderr, "failed to create RDMA CM event channel\n");
+  //   return -1;
+  // }
+  // ret = rdma_create_id(node->channel, &node->cma_id, node, RDMA_PS_UDP);
+  // if (ret) {
+  //   fprintf(stderr, "failed to create RDMA CM ID\n");
+  //   return ret;
+  // }
+  // ret = rdma_resolve_addr(node->cma_id, NULL, node->dst_addr, 2000);
+  // if (ret) {
+  //   perror("mckey: resolve addr failure");
+  //   return ret;
+  // }
+  // struct rdma_cm_event *event;
+
+  // while (!node->connected && !ret) {
+  //   ret = rdma_get_cm_event(node->channel, &event);
+  //   if (!ret) {
+  //     ret = cma_handler(event->id, event);
+  //     rdma_ack_cm_event(event);
+  //   }
+  // }
 
   return ret;
 }
@@ -271,12 +295,12 @@ int multicastCM::create_message(struct multicast_node *node) {
   return 0;
 }
 
-void multicastCM::fetch_message(TransferObj *message) {
+void multicastCM::fetch_message(int node_id, TransferObj *message) {
   // message = new TransferObj;
   TransferObj *message_place;
-  bool got = recv_obj_ptrs.try_dequeue(message_place);
+  bool got = recv_obj_ptrs[node_id].try_dequeue(message_place);
   while (!got) {
-    got = recv_obj_ptrs.try_dequeue(message_place);
+    got = recv_obj_ptrs[node_id].try_dequeue(message_place);
   }
   memcpy(message, message_place, kMcPageSize);
 }
@@ -288,7 +312,7 @@ void multicastCM::handle_recv(struct multicast_node *node, int id) {
   uint8_t *message = node->recv_messages + id * kRecvMcPageSize +
                      (kRecvMcPageSize - kMcPageSize);  // no ud padding
   TransferObj *recv_obj_ptr = reinterpret_cast<TransferObj *>(message);
-  if (recv_obj_ptr->node_id != cnode_id) recv_obj_ptrs.enqueue(recv_obj_ptr);
+  if (recv_obj_ptr->node_id != cnode_id) recv_obj_ptrs[node->id].enqueue(recv_obj_ptr);
     // recv_message_addrs.enqueue(message);
 #elif defined(FILTER_PAGE)
 #else
@@ -422,7 +446,8 @@ int multicastCM::init_recvs(struct multicast_node *node) {
   return ret;
 }
 
-int multicastCM::get_pos(TransferObj *&next_message_address) {
+int multicastCM::get_pos(int node_id, TransferObj *&next_message_address) {
+  multicast_node *node = nodes[node_id];
   int pos = node->send_pos;
   node->send_pos = RING_ADD(node->send_pos, 1, kMcMaxPostList);
   next_message_address =
@@ -431,7 +456,8 @@ int multicastCM::get_pos(TransferObj *&next_message_address) {
 }
 
 // return the sent position
-int multicastCM::send_message(int pos) {
+int multicastCM::send_message(int node_id, int pos) {
+  multicast_node *node = nodes[node_id];
   struct ibv_send_wr *bad_send_wr;
   ibv_send_wr *send_wr = &node->send_wr[pos];
   static bool start_poll = false;
@@ -452,12 +478,43 @@ int multicastCM::send_message(int pos) {
   return ret;
 }
 
+// void *multicastCM::cma_thread_worker(void *arg) {
+//   bindCore(mcCmaCore);
+//   struct rdma_cm_event *event;
+//   int ret;
+//   struct multicast_node *node = static_cast<multicast_node *>(arg);
+//   printf("mckey: worker %d, bind core is %d\n ", node->id, mcCmaCore);
+//   while (1) {
+//     ret = rdma_get_cm_event(node->channel, &event);
+//     if (ret) {
+//       perror("rdma_get_cm_event");
+//       break;
+//     }
+
+//     switch (event->event) {
+//       case RDMA_CM_EVENT_MULTICAST_ERROR:
+//       case RDMA_CM_EVENT_ADDR_CHANGE:
+//         printf("mckey: event: %s, status: %d\n",
+//         rdma_event_str(event->event),
+//                event->status);
+//         break;
+//       default:
+//         break;
+//     }
+
+//     rdma_ack_cm_event(event);
+//   }
+
+//   return NULL;
+// }
+
 void *multicastCM::cma_thread_worker(void *arg) {
-  bindCore(mcCmaCore);
+  bindCore(XMD::mcCmaCore);
   struct rdma_cm_event *event;
   int ret;
+
   struct multicast_node *node = static_cast<multicast_node *>(arg);
-  printf("mckey: worker %d, bind core is %d\n ", node->id, mcCmaCore);
+  printf("mckey: worker %d, bind core is %d\n ", node->id, XMD::mcCmaCore);
   while (1) {
     ret = rdma_get_cm_event(node->channel, &event);
     if (ret) {
@@ -481,13 +538,44 @@ void *multicastCM::cma_thread_worker(void *arg) {
   return NULL;
 }
 
-void *multicastCM::mc_maintainer(DSM *dsm, multicastCM *me) {
+void *multicastCM::cma_thread_manager(void *arg) {
+  bindCore(XMD::mcCmaCore);
+  multicastCM *mckey = static_cast<multicastCM *>(arg);
+  pthread_t workers[mckey->getGroupSize()];
+  printf("mckey: manager, using core %d, there are %d workers \n",
+         XMD::mcCmaCore, mckey->getGroupSize());
+
+  for (int i = 0; i < mckey->getGroupSize(); i++) {
+    // create worker threads for each group
+    int ret;
+    ret =
+        pthread_create(&workers[i], NULL, cma_thread_worker, mckey->getNode(i));
+    if (ret) {
+      perror("mckey: failed to create worker thread");
+      return NULL;
+    }
+  }
+
+  for (int i = 0; i < mckey->getGroupSize(); i++) {
+    // join worker threads for each group
+    int ret;
+    ret = pthread_join(workers[i], NULL);
+    if (ret) {
+      perror("mckey: failed to join worker thread");
+      return NULL;
+    }
+  }
+
+  return NULL;
+}
+
+void *multicastCM::mc_maintainer(DSM *dsm, int node_id, multicastCM *me) {
   // int id = (*(static_cast<int16_t *>(args[0])));
-  bindCore(rpcCore);
+  // bindCore(rpcCore);
   printf("mckey: maintainer, using core %d\n", rpcCore);
 
   // multicastCM *me = static_cast<multicastCM *>(args[1]);
-  multicast_node *node = me->node;
+  multicast_node *node = me->nodes[node_id];
   struct ibv_wc wc_buffer[kMcMaxRecvPostList + kpostlist];
   struct ibv_recv_wr *bad_recv_wr;
 
@@ -495,7 +583,7 @@ void *multicastCM::mc_maintainer(DSM *dsm, multicastCM *me) {
   int recv_handle_pos = 0;
   int empty_recv_num = 0;
 
-  dsm->barrier("create_multicast_agent2", dsm->getComputeNum());
+  dsm->barrier(std::string("create_multicast_agent") + std::to_string(node_id), dsm->getComputeNum());
 
   while (true) {
     int num_comps =
