@@ -121,7 +121,7 @@ multicastCM::~multicastCM() {
 int multicastCM::alloc_nodes() {
   int ret;
   for (int i = 0; i < mcGroups; i++) {
-    nodes[i] = new multicast_node;
+    nodes[i] = (multicast_node *)mbr.allocate(sizeof(struct multicast_node));
     if (!nodes[i]) {
       fprintf(stderr, "failed to allocate memory for test nodes\n");
       return -ENOMEM;
