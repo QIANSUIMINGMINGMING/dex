@@ -12,7 +12,7 @@ XMD::multicast::multicastCM *mcm;
 
 std::thread th[MAX_APP_THREAD];
 
-constexpr uint64_t psn_numbers = 10;
+constexpr uint64_t psn_numbers = 1;
 
 std::atomic<uint64_t> recv_psn;
 
