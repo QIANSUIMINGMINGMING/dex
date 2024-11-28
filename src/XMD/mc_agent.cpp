@@ -147,7 +147,7 @@ int multicastCM::alloc_nodes() {
       fprintf(stderr, "failed to create RDMA CM event channel\n");
       return -1;
     }
-    ret = rdma_create_id(nodes[i]->channel, &nodes[i]->cma_id, &nodes[i],
+    ret = rdma_create_id(nodes[i]->channel, &nodes[i]->cma_id, nodes[i],
                          RDMA_PS_UDP);
     if (ret) {
       fprintf(stderr, "failed to create RDMA CM ID\n");
