@@ -65,9 +65,9 @@ int main(int argc, char **argv) {
          XMD::multicast::kMcCardinality);
 
   DSMConfig config;
-  config.machineNR = 1;
+  config.machineNR = 2;
   config.memThreadCount = 1;
-  config.computeNR = 1;
+  config.computeNR = 2;
   config.index_type = 3;
   DSM *dsm = DSM::getInstance(config);
 
