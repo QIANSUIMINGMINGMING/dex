@@ -276,11 +276,15 @@ void multicastCM::handle_recv(struct multicast_node *node, int id) {
 #if defined(SINGLE_KEY)
   assert(false);
 #elif defined(KEY_PAGE)
+  node->received_++;
   uint8_t *message = node->recv_messages + id * kRecvMcPageSize +
                      (kRecvMcPageSize - kMcPageSize);  // no ud padding
   TransferObj *recv_obj_ptr = reinterpret_cast<TransferObj *>(message);
-  if (recv_obj_ptr->node_id != cnode_id) recv_obj_ptrs[node->id].enqueue(recv_obj_ptr);
-    // recv_message_addrs.enqueue(message);
+  if (recv_obj_ptr->node_id != cnode_id) {
+    recv_obj_ptrs[node->id].enqueue(recv_obj_ptr);
+    node->received_from_remote_++;
+  }
+  // recv_message_addrs.enqueue(message);
 #elif defined(FILTER_PAGE)
 #else
   assert(false);
@@ -550,7 +554,8 @@ void *multicastCM::mc_maintainer(DSM *dsm, int node_id, multicastCM *me) {
   int recv_handle_pos = 0;
   int empty_recv_num = 0;
 
-  dsm->barrier(std::string("create_multicast_agent") + std::to_string(node_id), dsm->getComputeNum());
+  dsm->barrier(std::string("create_multicast_agent") + std::to_string(node_id),
+               dsm->getComputeNum());
 
   while (true) {
     int num_comps =
@@ -579,13 +584,13 @@ void *multicastCM::mc_maintainer(DSM *dsm, int node_id, multicastCM *me) {
         node->recv_wr[pos].next =
             w_i == empty_recv_num - 1
                 ? nullptr
-                : &node->recv_wr[RING_ADD(pos, 1, kMcMaxPostList)];
+                : &node->recv_wr[RING_ADD(pos, 1, kMcMaxRecvPostList)];
       }
       int ret = ibv_post_recv(node->cma_id->qp, &node->recv_wr[empty_start_pos],
                               &bad_recv_wr);
       assert(ret == 0);
       empty_start_pos =
-          RING_ADD(empty_start_pos, empty_recv_num, kMcMaxPostList);
+          RING_ADD(empty_start_pos, empty_recv_num, kMcMaxRecvPostList);
       empty_recv_num = 0;
     }
   }

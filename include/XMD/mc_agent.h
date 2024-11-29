@@ -67,6 +67,8 @@ struct multicast_node {
   struct ibv_sge recv_sgl[kMcMaxRecvPostList];
   struct ibv_send_wr send_wr[kMcMaxPostList];
   struct ibv_sge send_sgl[kMcMaxPostList];
+  int received_ = 0;
+  int received_from_remote_ = 0;
 
   // send message control
   int send_pos{0};
@@ -220,7 +222,7 @@ class TransferObjBuffer {
     int multicast_node_id = tob->cm_node_->id;
     while (true) {
       // tob->my_cm_->fetch_message(multicast_node_id, tob->recv_buffer_);
-      tob->my_cm_->fetch_message(multicast_node_id, &(tob->recv_buffer_[tob->recv_messages_num]));
+      tob->my_cm_->fetch_message(multicast_node_id, &(tob->recv_buffer_for_test[tob->recv_messages_num]));
       tob->recv_messages_num++;
       printf("one receive\n");
     }
