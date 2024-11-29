@@ -173,7 +173,7 @@ class multicastCM {
 constexpr int BUFFER_SIZE = kMcMaxPostList / 2;
 // BufferPool class to manage two buffers and threading
 
-static std::atomic<uint64_t> global_psn{0};
+static inline std::atomic<uint64_t> global_psn{0};
 
 class TransferObjBuffer {
  public:

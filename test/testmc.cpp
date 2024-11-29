@@ -42,7 +42,7 @@ void thread_run(int id) {
   int thread_pack = (XMD::multicast::kMcCardinality * psn_numbers) / send_thread_num;
   int i = 0;
 
-  while (i < thread_pack) {
+  while (XMD::multicast::global_psn.load() < psn_numbers) {
     uint64_t dis = mehcached_zipf_next(&state);
     uint64_t key = to_key(dis);
     Value v;
