@@ -13,7 +13,7 @@ XMD::multicast::multicastCM *mcm;
 std::thread th[MAX_APP_THREAD];
 std::thread recv_thread;
 
-constexpr uint64_t psn_numbers = 100;
+constexpr uint64_t psn_numbers = 1000000;
 
 std::atomic<uint64_t> recv_psn;
 
@@ -42,6 +42,7 @@ void thread_run(int id) {
   int thread_pack = (XMD::multicast::kMcCardinality * psn_numbers) / send_thread_num;
   int i = 0;
 
+  auto start = std::chrono::high_resolution_clock::now();
   while (XMD::multicast::global_psn.load() < psn_numbers) {
     uint64_t dis = mehcached_zipf_next(&state);
     uint64_t key = to_key(dis);
@@ -56,6 +57,11 @@ void thread_run(int id) {
     }
     i++;
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+          .count();
+  std::cout << "throughput" << (psn_numbers / (duration)) * XMD::kMcPageSize << "Mops" << std::endl;
 }
 
 int main(int argc, char **argv) {
