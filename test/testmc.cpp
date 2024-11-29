@@ -61,7 +61,7 @@ void thread_run(int id) {
   auto duration =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start)
           .count();
-  std::cout << "throughput" << (psn_numbers / (duration)) * XMD::kMcPageSize << "Mops" << std::endl;
+  std::cout << "throughput" << ((double)psn_numbers / (double)(duration)) * XMD::kMcPageSize << "Mops" << std::endl;
 }
 
 int main(int argc, char **argv) {
