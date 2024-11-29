@@ -104,5 +104,7 @@ int main(int argc, char **argv) {
   // double loss_rate = (double)loss_packages / FLAGS_psn_numbers;
   // printf("loss rate %f\n", loss_rate);
   printf("test complete\n");
+
+  while (true) {}
   return 0;
 }
