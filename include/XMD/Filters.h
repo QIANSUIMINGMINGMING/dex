@@ -137,7 +137,7 @@ struct FilterNodeBuffer {
     size_t snapshot_oldest = oldest.load();
     TS snapshot_ts = oldest_TS_.load();
 
-    size_t cur = snapshot_latest;
+    int cur = snapshot_latest;
     FilterPoolNode *filter = &filters[cur];
     size_t hash_kit_1;
     pbf::V128X has_kit_2 = pbf::PageBloomFilter<FIT_WAY>::partial_test1(

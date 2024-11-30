@@ -300,7 +300,7 @@ void thread_run_rc(int id, int op_num, int warm_num) {
   while (warm_up_ok.load() < thread_num);
   auto start = std::chrono::high_resolution_clock::now();
   // old_tss[tss_idx] = XMD::myClock::get_ts();
-  while (i < thread_op_num) {
+  while (i < thread_op_num && !one_finish.load()) {
     uint64_t key = thread_op_array[i];
     DSBench::op_type cur_op = static_cast<DSBench::op_type>(key >> 56);
     key = key & DSBench::op_mask;
