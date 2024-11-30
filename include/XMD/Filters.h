@@ -151,6 +151,7 @@ struct FilterNodeBuffer {
         minTS = filter->startTS.load();
         return filter->state.load() != INVALID_FILTER;
       }
+      cur--;
     }
     return false;
   }

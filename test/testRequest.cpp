@@ -362,8 +362,8 @@ int main() {
   dsm = DSM::getInstance(config);
   cachepush::global_dsm_ = dsm;
   // #Worker-threads in this CNode
-  uint64_t op_num = 100000000;
-  uint64_t warm_num = 100000000;
+  uint64_t op_num = 100000;
+  uint64_t warm_num = 100000;
   DSBench::kKeySpace = warm_num + op_num;
   DSBench::init_random();
   uint16_t node_id = dsm->getMyNodeID();
