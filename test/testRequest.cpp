@@ -204,7 +204,7 @@ void thread_run(int id, int op_num, int warm_num) {
   int tss_idx = 0;
   int store_tss_idx = 0;
   // old_tss[tss_idx] = XMD::myClock::get_ts();
-  while (i < thread_op_num) {
+  while (i < thread_op_num && one_finish.load() == false) {
     if (i % 5000 == 0 && id == 0) {
       old_tss[tss_idx] = XMD::myClock::get_ts();
       tss_idx = RING_ADD(tss_idx, 1, 100);
