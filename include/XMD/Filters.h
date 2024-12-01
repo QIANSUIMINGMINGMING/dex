@@ -83,6 +83,7 @@ struct FilterNodeBuffer {
     filters[cur].endTS.store(XMD::myClock::get_ts());
     filters[cur].end_offset = cur_offset;
     filters[next].valid(filters[cur].endTS, cur_offset);
+    latest.store(next);
   }
 
   FilterPoolNode *get_oldest_filter_and_set_invalid() {
@@ -109,14 +110,22 @@ struct FilterNodeBuffer {
     size_t snapshot_latest = latest.load();
     size_t snapshot_oldest = oldest.load();
 
+    while (filters[snapshot_latest].endTS > ts) {
+      snapshot_latest = latest.load();
+    }
+
+    int snap_n = RING_SUB(snapshot_latest, snapshot_oldest, kMaxFilters);
+    int cur = snap_n;
+
     if (ts <= snapshot_ts) return false;
-    size_t cur = snapshot_latest;
-    while (cur >= snapshot_oldest) {
-      if (filters[cur].endTS > ts && filters[cur].startTS <= ts) {
-        filter = &filters[cur];
+    // int snapshot_n = RING_SUB
+    while (cur >= 0) {
+      size_t filter_pos = RING_ADD(snapshot_oldest, cur, kMaxFilters);
+      if (filters[filter_pos].endTS > ts && filters[filter_pos].startTS <= ts) {
+        filter = &filters[filter_pos];
         return filter->state.load() == MUTABLE_FILTER;
       } else {
-        cur = RING_SUB(cur, 1, kMaxFilters);
+        cur--;
       }
     }
     assert(false);
@@ -144,7 +153,7 @@ struct FilterNodeBuffer {
         (const uint8_t *)&key, sizeof(Key), &(filter->filter), hash_kit_1);
     
     // leave false positive to future work since it's rare
-    while (cur >= snapshot_oldest) {
+    while (cur >= (int)snapshot_oldest) {
       filter = &filters[cur];
       if (filter->filter.partial_test2(hash_kit_1, has_kit_2)) {
         maxTS = filter->endTS.load();

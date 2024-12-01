@@ -461,11 +461,16 @@ public:
    */
   template <typename K, typename F> bool find_fn(const K &key, uint64_t & got_ts, F fn) const {
     const hash_value hv = hashed_key(key);
-    const auto b = snapshot_and_lock_two<normal_mode>(hv);
-    const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
+    // const auto b = snapshot_and_lock_two<normal_mode>(hv);
+    const size_type hp = hashpower();
+    const size_type i1 = index_hash(hp, hv.hash);
+    const size_type i2 = alt_index(hp, hv.partial, i1);
+    mapped_type v;
+    uint64_t check_ts;
+    const table_position pos = cuckoo_find_with_TS(key, hv.partial, i1, i2, check_ts, v);
     if (pos.status == ok) {
-      fn(buckets_[pos.index].mapped(pos.slot));
-      got_ts = buckets_[pos.index].get_TS(pos.slot);
+      fn(v);
+      got_ts = check_ts;
       return true;
     } else {
       return false;
@@ -486,11 +491,16 @@ public:
   template <typename K, typename F>
   bool update_fn(const K &key, uint64_t new_ts, F fn) {
     const hash_value hv = hashed_key(key);
-    const auto b = snapshot_and_lock_two<normal_mode>(hv);
-    const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
+    // const auto b = snapshot_and_lock_two<normal_mode>(hv);
+    const size_type hp = hashpower();
+    const size_type i1 = index_hash(hp, hv.hash);
+    const size_type i2 = alt_index(hp, hv.partial, i1);
+    const table_position pos = cuckoo_find(key, hv.partial, i1, i2);
     if (pos.status == ok) {
-      buckets_[pos.index].setTS(pos.slot, new_ts);
-      fn(buckets_[pos.index].mapped(pos.slot));
+      if (buckets_[pos.index].newerTS(pos.slot, new_ts)) {
+        buckets_[pos.index].setTS(pos.slot, new_ts);
+        fn(buckets_[pos.index].mapped(pos.slot));
+      }
       return true;
     } else {
       return false;
@@ -574,6 +584,12 @@ public:
   template <typename K, typename F, typename... Args>
   bool uprase_fn(K &&key, uint64_t ts, bool &need_resize, F fn, Args &&...val) {
     hash_value hv = hashed_key(key);
+    // const size_type hp = hashpower();
+    // const size_type i1 = index_hash(hp, hv.hash);
+    // const size_type i2 = alt_index(hp, hv.partial, i1);
+    // TwoBuckets b;
+    // b.i1 = i1;
+    // b.i2 = i2;
     auto b = snapshot_and_lock_two<normal_mode>(hv);
     need_resize = false;
     table_position pos = cuckoo_insert_loop<normal_mode>(hv, b, key, need_resize);
@@ -661,7 +677,7 @@ public:
    * CopyAssignable.
    */
   template <typename K, typename V>
-  bool update(const K &key, uint64_t new_ts, V &&val) {
+  bool update(const K &key, const uint64_t new_ts, V &&val) {
     assert(new_ts > oldest_TS);
     return update_fn(key, new_ts,
                      [&val](mapped_type &v) { v = std::forward<V>(val); });
@@ -1198,10 +1214,52 @@ private:
     // Silence a warning from MSVC about partial being unused if is_simple.
     (void)partial;
     for (int i = 0; i < static_cast<int>(slot_per_bucket()); ++i) {
+      
       if (!b.checkTS(i) || (!is_simple() && partial != b.partial(i))) {
         continue;
       } else if (key_eq()(b.key(i), key)) {
         return i;
+      }
+    }
+    return -1;
+  }
+
+  template <typename K>
+  table_position cuckoo_find_with_TS(const K &key, const partial_t partial,
+                             const size_type i1, const size_type i2, uint64_t & gotTS, mapped_type &v) const {
+    int slot = try_read_from_bucket_with_TS(buckets_[i1], partial, key, gotTS, v);
+    if (slot != -1) {
+      return table_position{i1, static_cast<size_type>(slot), ok};
+    }
+    slot = try_read_from_bucket_with_TS(buckets_[i2], partial, key, gotTS, v);
+    if (slot != -1) {
+      return table_position{i2, static_cast<size_type>(slot), ok};
+    }
+    return table_position{0, 0, failure_key_not_found};
+  }
+
+  // try_read_from_bucket will search the bucket for the given key and return
+  // the index of the slot if found, or -1 if not found.
+  template <typename K>
+  int try_read_from_bucket_with_TS(const faded_bucket &b, const partial_t partial,
+                           const K &key, uint64_t &gotTS, mapped_type &v) const {
+    // Silence a warning from MSVC about partial being unused if is_simple.
+    (void)partial;
+    uint64_t snapshot_ts;
+
+    for (int i = 0; i < static_cast<int>(slot_per_bucket()); ++i) {
+      retry:
+      snapshot_ts = b.get_TS(i);
+      if (!b.checkTS(i) || (!is_simple() && partial != b.partial(i))) {
+        continue;
+      } else if (key_eq()(b.key(i), key)) {
+        v = b.mapped(i);
+        if (snapshot_ts == b.get_TS(i)) {
+          gotTS = snapshot_ts;
+          return i;
+        } else {
+          goto retry;
+        }
       }
     }
     return -1;
@@ -1291,6 +1349,8 @@ private:
       return table_position{b.i2, static_cast<size_type>(res2), ok};
     }
 
+    // size_type hp = hashpower();
+    // b = lock_two(hp, b.i1, b.i2, TABLE_MODE());
     // We are unlucky, so let's perform cuckoo hashing.
     size_type insert_bucket = 0;
     size_type insert_slot = 0;

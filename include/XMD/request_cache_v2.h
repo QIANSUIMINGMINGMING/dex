@@ -1,10 +1,9 @@
-#include "../third_party/libcuckoo/cuckoohash_map.hh"
-#include "libfadecuckoo/faded_cuckoohash_map.hh"
-
 #include "../Common.h"
 #include "../DSM.h"
+#include "../third_party/libcuckoo/cuckoohash_map.hh"
 #include "ChronoBuffer.h"
 #include "Filters.h"
+#include "libfadecuckoo/faded_cuckoohash_map.hh"
 #include "requestCache_rpc.h"
 
 namespace XMD {
@@ -19,7 +18,7 @@ namespace RequestCache_v3 {
 using RequestHashTable = libfadecuckoo::cuckoohash_map<Key, Value>;
 
 class RequestCache {
-public:
+ public:
   RequestHashTable rht_;
   u64 chrono_size_;
   u64 ht_size_;
@@ -34,6 +33,8 @@ public:
   DSM *dsm_;
   std::atomic<TS> oldest_ts_;
   u64 latest_start_offset_{0};
+  std::atomic<uint64_t> remote_find{0};
+  std::atomic<uint64_t> remote_insert{0};
 
   // remote part
   ComputeSideHash compute_side_hash_;
@@ -42,8 +43,11 @@ public:
   static thread_local u64 inline cur_buffer_remain = 0;
 
   RequestCache(DSM *dsm, u64 chrono_size, u64 node_id, u64 node_num)
-      : rht_(defaultCacheSize), chrono_buffer_(chrono_size), filter_buffer_(),
-        dsm_(dsm), compute_side_hash_(dsm) {
+      : rht_(defaultCacheSize),
+        chrono_buffer_(chrono_size),
+        filter_buffer_(),
+        dsm_(dsm),
+        compute_side_hash_(dsm) {
     chrono_size_ = chrono_size;
     node_id_ = node_id;
     node_num_ = node_num;
@@ -66,6 +70,7 @@ public:
       if (filter_buffer_.contain(k, max, min)) {
         if (max > snapshot_ts) {
           return compute_side_hash_.find(k, v);
+          remote_find.fetch_add(1);
         }
       }
     }
@@ -92,8 +97,7 @@ public:
     FilterPoolNode *filter;
     filter_buffer_.get_filter_by_TS(kvts.ts, filter);
     if (node_id_ == kvts.k % node_num_) {
-      if (kvts.ts < snapshot_ts)
-        assert(false);
+      if (kvts.ts < snapshot_ts) assert(false);
       u64 offset = push_to_chrono_buffer(kvts);
       if (filter->endTS.load() != NULL_TS) {
         if (filter->end_offset < offset) {
@@ -102,11 +106,15 @@ public:
       }
     }
     bool need_resize = false;
-    rht_.insert_or_assign(kvts.k, kvts.ts, need_resize, kvts.v);
+    bool ret = rht_.update(kvts.k, kvts.ts, kvts.v);
+    if (!ret) {
+      rht_.insert(kvts.k, kvts.ts, need_resize, kvts.v);
+    }
     if (need_resize) {
       // insert to remote
       filter->filter.set((const uint8_t *)&kvts.k, sizeof(Key));
       compute_side_hash_.insert(kvts, snapshot_ts);
+      remote_insert.fetch_add(1);
     }
   }
 
@@ -121,16 +129,23 @@ public:
     chrono_buffer_.release(end_offset);
     oldest_ts_.store(inserted_node->endTS.load());
     filter_buffer_.delete_old_filter();
+    rht_.oldest_TS.store(inserted_node->endTS.load());
     inserted_node->clear_self();
   }
 
   static void period_batch(RequestCache *rc) {
-    while (rc->filter_buffer_.latest - rc->filter_buffer_.oldest > 10) {
-      FilterPoolNode *oldest_node;
-      rc->before_batch_insert_ops(oldest_node);
-      // sleep for 200 us
-      std::this_thread::sleep_for(std::chrono::microseconds(200));
-      rc->after_batch_insert_ops(oldest_node);
+    while (rc->filter_buffer_.latest - rc->filter_buffer_.oldest <= 10) {
+    }
+    while (true) {
+      if (rc->filter_buffer_.latest - rc->filter_buffer_.oldest > 10) {
+        FilterPoolNode *oldest_node;
+        rc->before_batch_insert_ops(oldest_node);
+        // sleep for 200 us
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+        rc->after_batch_insert_ops(oldest_node);
+      } else {
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+      }
     }
   }
 
@@ -145,7 +160,7 @@ public:
     }
   }
 };
-} // namespace RequestCache_v3
+}  // namespace RequestCache_v3
 
 // v2
 // struct TSV {
@@ -323,4 +338,4 @@ public:
 //   }
 // };
 
-} // namespace XMD
+}  // namespace XMD

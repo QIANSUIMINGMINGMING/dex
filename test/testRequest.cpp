@@ -280,7 +280,7 @@ void thread_run_rc(int id, int op_num, int warm_num) {
       DSBench::zipf_test_keys + warm_num + id * thread_op_num;
 
   uint64_t* thread_op_array;
-  if (true) {
+  if (false) {
     thread_op_array = thread_op_array_uniform;
   } else {
     thread_op_array = thread_op_array_zipf;
@@ -362,8 +362,8 @@ int main() {
   dsm = DSM::getInstance(config);
   cachepush::global_dsm_ = dsm;
   // #Worker-threads in this CNode
-  uint64_t op_num = 100000;
-  uint64_t warm_num = 100000;
+  uint64_t op_num = 10000000;
+  uint64_t warm_num = 10000000;
   DSBench::kKeySpace = warm_num + op_num;
   DSBench::init_random();
   uint16_t node_id = dsm->getMyNodeID();
@@ -389,8 +389,13 @@ int main() {
     for (size_t i = 0; i < thread_num; i++) {
       total_tp_sum += total_tp[i];
     }
+    std::cout << "remote find: " << cache->remote_find << std::endl;
+    std::cout << "remote insert" << cache->remote_insert << std::endl;
 
-    std::cout << "total throughput" << total_tp_sum << std::endl;
+    std::cout << "total throughput: " << total_tp_sum << std::endl;
+
+    while (true) {
+    }
   }
   std::cout << "Before barrier finish" << std::endl;
   dsm->barrier("finish");
