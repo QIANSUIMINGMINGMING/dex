@@ -873,6 +873,50 @@ void parse_args(int argc, char *argv[]) {
   std::cout << "KeySpace = " << kKeySpace << std::endl;
 }
 
+void cal_latency() {
+  uint64_t all_lat = 0;
+  for (int i = 0; i < LATENCY_WINDOWS; ++i) {
+    latency_th_all[i] = 0;
+    for (int k = 0; k < MAX_APP_THREAD; ++k) {
+      latency_th_all[i] += latency[k][i];
+    }
+    all_lat += latency_th_all[i];
+  }
+
+  uint64_t th50 = all_lat / 2;
+  uint64_t th90 = all_lat * 9 / 10;
+  uint64_t th95 = all_lat * 95 / 100;
+  uint64_t th99 = all_lat * 99 / 100;
+  uint64_t th999 = all_lat * 999 / 1000;
+
+  uint64_t cum = 0;
+  for (int i = 0; i < LATENCY_WINDOWS; ++i) {
+    cum += latency_th_all[i];
+
+    if (cum >= th50) {
+      printf("p50 %f\t", i / 10.0);
+      th50 = -1;
+    }
+    if (cum >= th90) {
+      printf("p90 %f\t", i / 10.0);
+      th90 = -1;
+    }
+    if (cum >= th95) {
+      printf("p95 %f\t", i / 10.0);
+      th95 = -1;
+    }
+    if (cum >= th99) {
+      printf("p99 %f\t", i / 10.0);
+      th99 = -1;
+    }
+    if (cum >= th999) {
+      printf("p999 %f\n", i / 10.0);
+      th999 = -1;
+      return;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   numa_set_preferred(1);
   parse_args(argc, argv);
@@ -1183,6 +1227,52 @@ int main(int argc, char *argv[]) {
                 << (static_cast<double>(XMDsetting_cluster_throughput) /
                     std::pow(10, 6))
                 << " MOPS" << std::endl;
+      std::cout << "XMD cluster latency: node " << node_id << " " << std::endl;
+      cal_latency();
+
+      std::cout << "XMD RDMA info: " << node_id << " " << std::endl;
+
+      uint64_t rdma_read_num = dsm->get_rdma_read_num();
+      uint64_t rdma_write_num = dsm->get_rdma_write_num();
+      uint64_t rdma_read_time = dsm->get_rdma_read_time();
+      uint64_t rdma_write_time = dsm->get_rdma_write_time();
+      int64_t rdma_read_size = dsm->get_rdma_read_size();
+      uint64_t rdma_write_size = dsm->get_rdma_write_size();
+      uint64_t rdma_cas_num = dsm->get_rdma_cas_num();
+      uint64_t rdma_rpc_num = dsm->get_rdma_rpc_num();
+      std::cout << "Avg. rdma read time(ms) = "
+                << static_cast<double>(rdma_read_time) / 1000 / rdma_read_num
+                << std::endl;
+      std::cout << "Avg. rdma write time(ms) = "
+                << static_cast<double>(rdma_write_time) / 1000 / rdma_write_num
+                << std::endl;
+      std::cout << "Avg. rdma read / op = "
+                << static_cast<double>(rdma_read_num) / execute_op.load()
+                << std::endl;
+      std::cout << "Avg. rdma write / op = "
+                << static_cast<double>(rdma_write_num) / execute_op.load()
+                << std::endl;
+      std::cout << "Avg. rdma cas / op = "
+                << static_cast<double>(rdma_cas_num) / execute_op.load()
+                << std::endl;
+      std::cout << "Avg. rdma rpc / op = "
+                << static_cast<double>(rdma_rpc_num) / execute_op.load()
+                << std::endl;
+      std::cout << "Avg. all rdma / op = "
+                << static_cast<double>(rdma_read_num + rdma_write_num +
+                                       rdma_cas_num + rdma_rpc_num) /
+                       execute_op.load()
+                << std::endl;
+      std::cout << "Avg. rdma read size/ op = "
+                << static_cast<double>(rdma_read_size) / execute_op.load()
+                << std::endl;
+      std::cout << "Avg. rdma write size / op = "
+                << static_cast<double>(rdma_write_size) / execute_op.load()
+                << std::endl;
+      std::cout << "Avg. rdma RW size / op = "
+                << static_cast<double>(rdma_read_size + rdma_write_size) /
+                       execute_op.load()
+                << std::endl;
 
       // uint64_t max_time = 0;
       // for (int i = 0; i < kThreadCount; ++i) {
