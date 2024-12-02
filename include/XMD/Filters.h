@@ -18,8 +18,10 @@ namespace XMD {
 
 constexpr int effective_items = 4096;
 constexpr double effective_fpp = 0.01;
+constexpr uint64_t not_handle_interval =
+    200;  // we dont make identify ts < 200 operations
 
-//leave memory control and handle of false positive of bf to future work
+// leave memory control and handle of false positive of bf to future work
 constexpr int kMaxFilters = 8192;
 
 #define INVALID_FILTER 0
@@ -33,13 +35,11 @@ struct FilterPoolNode {
       pbf::Create<pbf::BestWay(effective_fpp)>(effective_items, effective_fpp)};
   std::atomic<TS> startTS{0};
   std::atomic<TS> endTS{NULL_TS};
-  std::atomic<int> state{0};//0: invalid, 1: immutable, 2: mutable
+  std::atomic<int> state{0};  // 0: invalid, 1: immutable, 2: mutable
   std::vector<u64> remains_offsets;
   std::mutex remains_mutex;
 
-  FilterPoolNode() {
-    remains_offsets.reserve(100);
-  }
+  FilterPoolNode() { remains_offsets.reserve(100); }
 
   void valid(TS start_ts, u64 cur_offset) {
     start_offset = cur_offset;
@@ -98,7 +98,7 @@ struct FilterNodeBuffer {
     assert(latest != oldest);
     size_t cur = oldest;
     size_t next = RING_ADD(cur, 1, kMaxFilters);
-    //TODO: free
+    // TODO: free
     oldest = next;
     oldest_TS_ = filters[next].startTS.load();
   }
@@ -110,7 +110,7 @@ struct FilterNodeBuffer {
     size_t snapshot_latest = latest.load();
     size_t snapshot_oldest = oldest.load();
 
-    while (filters[snapshot_latest].endTS > ts) {
+    while (filters[snapshot_latest].endTS <= ts) {
       snapshot_latest = latest.load();
     }
 
@@ -128,11 +128,20 @@ struct FilterNodeBuffer {
         cur--;
       }
     }
-    assert(false);
+
+    if (ts < filters[snapshot_latest].endTS + not_handle_interval) {
+      filter = &filters[snapshot_latest];
+      return filter->state.load() == MUTABLE_FILTER;
+    }
+
+    // if (filters[snapshot_oldest].state.load() == MUTABLE_FILTER) {
+    //   printf("filters oldest state: %d\n",
+    //          filters[snapshot_oldest].state.load());
+    // }
     return false;
   }
 
-  bool insert_filter(const KVTS & kvts) {
+  bool insert_filter(const KVTS &kvts) {
     FilterPoolNode *filter;
     if (get_filter_by_TS(kvts.ts, filter)) {
       filter->filter.set((const uint8_t *)&kvts.k, sizeof(Key));
@@ -141,7 +150,7 @@ struct FilterNodeBuffer {
     return false;
   }
 
-  bool contain(const Key &key, TS & maxTS, TS & minTS) {
+  bool contain(const Key &key, TS &maxTS, TS &minTS) {
     size_t snapshot_latest = latest.load();
     size_t snapshot_oldest = oldest.load();
     TS snapshot_ts = oldest_TS_.load();
@@ -151,7 +160,7 @@ struct FilterNodeBuffer {
     size_t hash_kit_1;
     pbf::V128X has_kit_2 = pbf::PageBloomFilter<FIT_WAY>::partial_test1(
         (const uint8_t *)&key, sizeof(Key), &(filter->filter), hash_kit_1);
-    
+
     // leave false positive to future work since it's rare
     while (cur >= (int)snapshot_oldest) {
       filter = &filters[cur];
@@ -166,4 +175,4 @@ struct FilterNodeBuffer {
   }
 };
 
-} // namespace XMD
+}  // namespace XMD

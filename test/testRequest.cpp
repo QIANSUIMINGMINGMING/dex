@@ -280,7 +280,7 @@ void thread_run_rc(int id, int op_num, int warm_num) {
       DSBench::zipf_test_keys + warm_num + id * thread_op_num;
 
   uint64_t* thread_op_array;
-  if (false) {
+  if (true) {
     thread_op_array = thread_op_array_uniform;
   } else {
     thread_op_array = thread_op_array_zipf;

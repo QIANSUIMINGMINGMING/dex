@@ -491,11 +491,12 @@ public:
   template <typename K, typename F>
   bool update_fn(const K &key, uint64_t new_ts, F fn) {
     const hash_value hv = hashed_key(key);
-    // const auto b = snapshot_and_lock_two<normal_mode>(hv);
-    const size_type hp = hashpower();
-    const size_type i1 = index_hash(hp, hv.hash);
-    const size_type i2 = alt_index(hp, hv.partial, i1);
-    const table_position pos = cuckoo_find(key, hv.partial, i1, i2);
+    const auto b = snapshot_and_lock_two<normal_mode>(hv);
+    // const size_type hp = hashpower();
+    // const size_type i1 = index_hash(hp, hv.hash);
+    // const size_type i2 = alt_index(hp, hv.partial, i1);
+    // const table_position pos = cuckoo_find(key, hv.partial, i1, i2);
+    const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
     if (pos.status == ok) {
       if (buckets_[pos.index].newerTS(pos.slot, new_ts)) {
         buckets_[pos.index].setTS(pos.slot, new_ts);
@@ -595,6 +596,11 @@ public:
     table_position pos = cuckoo_insert_loop<normal_mode>(hv, b, key, need_resize);
     if (need_resize) {
       return false;
+    }
+
+    uint64_t snap_tts = oldest_TS.load();
+    if (ts < snap_tts) {
+      return true;
     }
     UpsertContext upsert_context;
     if (pos.status == ok) {
@@ -1404,7 +1410,7 @@ private:
   // in `slot` and return true. If no duplicate key is found and no empty slot
   // is found, we store -1 in `slot` and return true.
   template <typename K>
-  bool try_find_insert_bucket(const faded_bucket &b, int &slot,
+  bool try_find_insert_bucket(faded_bucket &b, int &slot,
                               const partial_t partial, const K &key) const {
     // Silence a warning from MSVC about partial being unused if is_simple.
     (void)partial;
@@ -1420,7 +1426,9 @@ private:
         }
         // faded
         if (b.get_TS(slot) < oldest_TS.load()) {
+          b.clear_bucket(slot);
           slot = i;
+          return true;
         }
       } else {
         slot = i;
@@ -2134,7 +2142,7 @@ private:
   // This class is a friend for unit testing
   friend class UnitTestInternalAccess;
 
-  static constexpr size_type kMaxNumLocks = 1UL << 16;
+  static constexpr size_type kMaxNumLocks = 1UL << 20; 
 
   locks_t &get_current_locks() const { return all_locks_.back(); }
 

@@ -69,8 +69,8 @@ class RequestCache {
       TS max;
       if (filter_buffer_.contain(k, max, min)) {
         if (max > snapshot_ts) {
-          return compute_side_hash_.find(k, v);
           remote_find.fetch_add(1);
+          return compute_side_hash_.find(k, v);
         }
       }
     }
@@ -112,9 +112,9 @@ class RequestCache {
     }
     if (need_resize) {
       // insert to remote
+      remote_insert.fetch_add(1);
       filter->filter.set((const uint8_t *)&kvts.k, sizeof(Key));
       compute_side_hash_.insert(kvts, snapshot_ts);
-      remote_insert.fetch_add(1);
     }
   }
 
@@ -129,6 +129,8 @@ class RequestCache {
     chrono_buffer_.release(end_offset);
     oldest_ts_.store(inserted_node->endTS.load());
     filter_buffer_.delete_old_filter();
+
+    assert(rht_.oldest_TS.load() < inserted_node->endTS.load());
     rht_.oldest_TS.store(inserted_node->endTS.load());
     inserted_node->clear_self();
   }

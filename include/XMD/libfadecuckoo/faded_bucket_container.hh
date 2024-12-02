@@ -67,6 +67,7 @@ class bucket_container {
       return *static_cast<const value_type *>(
           static_cast<const void *>(&values_[ind]));
     }
+
     value_type &kvpair(size_type ind) {
       return *static_cast<value_type *>(static_cast<void *>(&values_[ind]));
     }
@@ -77,6 +78,7 @@ class bucket_container {
     key_type &&movable_key(size_type ind) {
       return std::move(storage_kvpair(ind).first);
     }
+    key_type &modify_key(size_type ind) { return storage_kvpair(ind).first; }
 
     const mapped_type &mapped(size_type ind) const {
       return storage_kvpair(ind).second;
@@ -93,6 +95,11 @@ class bucket_container {
     // uint64_t &get_TS(size_type ind) { return TSs_[ind]; }
 
     void setTS(size_type ind, uint64_t ts) { TSs_[ind] = ts; }
+
+    void clear_bucket(size_type ind) {
+      partial(ind) = 0;
+      modify_key(ind) = 0;
+    }
 
    private:
     friend class bucket_container;
@@ -113,7 +120,7 @@ class bucket_container {
                SLOT_PER_BUCKET>
         values_;
     std::array<partial_t, SLOT_PER_BUCKET> partials_;
-    std::array<uint64_t, SLOT_PER_BUCKET> TSs_;
+    std::array<volatile uint64_t, SLOT_PER_BUCKET> TSs_;
   };
 
   bucket_container(size_type hp, const allocator_type &allocator)
@@ -214,14 +221,18 @@ class bucket_container {
   void setKV(size_type ind, size_type slot, partial_t p, K &&k, uint64_t ts,
              Args &&...args) {
     faded_bucket &b = buckets_[ind];
-    assert(b.newerTS(slot, ts));
+    // assert(b.newerTS(slot, ts));
+    // if (b.newerTS(slot,ts)== false) {
+    //   assert(false);
+    // }
+    
     b.partial(slot) = p;
+    b.setTS(slot, ts);
     traits_::construct(allocator_, std::addressof(b.storage_kvpair(slot)),
                        std::piecewise_construct,
                        std::forward_as_tuple(std::forward<K>(k)),
                        std::forward_as_tuple(std::forward<Args>(args)...));
     // This must occur last, to enforce a strong exception guarantee
-    b.setTS(slot, ts);
   }
 
   // Destroys live data in a bucket
