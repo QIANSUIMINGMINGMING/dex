@@ -585,13 +585,13 @@ public:
   template <typename K, typename F, typename... Args>
   bool uprase_fn(K &&key, uint64_t ts, bool &need_resize, F fn, Args &&...val) {
     hash_value hv = hashed_key(key);
-    // const size_type hp = hashpower();
-    // const size_type i1 = index_hash(hp, hv.hash);
-    // const size_type i2 = alt_index(hp, hv.partial, i1);
-    // TwoBuckets b;
-    // b.i1 = i1;
-    // b.i2 = i2;
-    auto b = snapshot_and_lock_two<normal_mode>(hv);
+    const size_type hp = hashpower();
+    const size_type i1 = index_hash(hp, hv.hash);
+    const size_type i2 = alt_index(hp, hv.partial, i1);
+    TwoBuckets b;
+    b.i1 = i1;
+    b.i2 = i2;
+    // auto b = snapshot_and_lock_two<normal_mode>(hv);
     need_resize = false;
     table_position pos = cuckoo_insert_loop<normal_mode>(hv, b, key, need_resize);
     if (need_resize) {
