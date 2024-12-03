@@ -656,16 +656,16 @@ public:
    * @return the value associated with the given key
    * @throw std::out_of_range if the key is not found
    */
-  template <typename K> mapped_type find(const K &key) const {
-    const hash_value hv = hashed_key(key);
-    const auto b = snapshot_and_lock_two<normal_mode>(hv);
-    const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
-    if (pos.status == ok) {
-      return buckets_[pos.index].mapped(pos.slot);
-    } else {
-      throw std::out_of_range("key not found in table");
-    }
-  }
+  // template <typename K> mapped_type find(const K &key) const {
+  //   const hash_value hv = hashed_key(key);
+  //   const auto b = snapshot_and_lock_two<normal_mode>(hv);
+  //   const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
+  //   if (pos.status == ok) {
+  //     return buckets_[pos.index].mapped(pos.slot);
+  //   } else {
+  //     throw std::out_of_range("key not found in table");
+  //   }
+  // }
 
   /**
    * Returns whether or not @p key is in the table. Equivalent to @ref
