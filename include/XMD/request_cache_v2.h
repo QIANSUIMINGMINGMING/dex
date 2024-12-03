@@ -59,7 +59,6 @@ class RequestCache {
   // bool lookup
 
   bool lookup(const Key &k, Value &v) {
-    TS snapshot_ts = oldest_ts_.load();
     bool found;
     TS ts_in_local;
     found = rht_.find(k, ts_in_local, v);
@@ -67,6 +66,7 @@ class RequestCache {
       return true;
     } else {
       // path 1
+      TS snapshot_ts = oldest_ts_.load();
       TS min;
       TS max;
       if (filter_buffer_.contain(k, max, min)) {
