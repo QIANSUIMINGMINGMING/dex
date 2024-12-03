@@ -285,6 +285,7 @@ class TransferObjBuffer {
   TransferObj *buffer_;
   TransferObj *recv_buffer_;
   TransferObj recv_buffer_for_test[1000];
+  std::mutex mutex_;
   // std::thread fetch_thread;
 
   std::atomic<uint64_t> ready_to_send{0};
@@ -343,17 +344,20 @@ class TransferObjBuffer {
     //   }
     // } else {
     // put into concurrency
-    uint64_t my_pos = cur_element_num_in_concurrency.fetch_add(1);
+
+    bool poss = rand() % kMcCardinality == 0;
+    uint64_t my_pos = poss ? 0 : kMcCardinality -1;
     if (my_pos < kMcCardinality) {
       buffer_->elements[my_pos].k = kvts.k;
       buffer_->elements[my_pos].ts = kvts.ts;
       buffer_->elements[my_pos].v = kvts.v;
       if (my_pos == kMcCardinality - 1) {
+        mutex_.lock();
         my_cm_->send_message(cm_node_->id, cur_pos);
         cur_pos = my_cm_->get_pos(cm_node_->id, buffer_);
         buffer_->node_id = my_cm_->get_cnode_id();
         buffer_->psn = global_psn.fetch_add(1);
-        cur_element_num_in_concurrency.store(0);
+        mutex_.unlock();
       }
     } else {
       int yield_time = 0;
