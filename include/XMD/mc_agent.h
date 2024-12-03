@@ -353,7 +353,7 @@ class TransferObjBuffer {
       buffer_->elements[my_pos].v = kvts.v;
       if (my_pos == kMcCardinality - 1) {
         mutex_.lock();
-        my_cm_->send_message(cm_node_->id, cur_pos);
+        // my_cm_->send_message(cm_node_->id, cur_pos);
         cur_pos = my_cm_->get_pos(cm_node_->id, buffer_);
         buffer_->node_id = my_cm_->get_cnode_id();
         buffer_->psn = global_psn.fetch_add(1);
