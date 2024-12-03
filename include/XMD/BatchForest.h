@@ -34,7 +34,7 @@ class BatchForest : public tree_api<T, P> {
     mcm->print_self();
     // mcm2 = std::make_unique<rdmacm::multicast::multicastCM>(dsm);
 
-    dsm->barrier("init-mc");
+    dsm->barrier("init-mc", dsm->getComputeNum());
 
     tob = new XMD::multicast::TransferObjBuffer(mcm, 0);
     multicast_recv_thread =
