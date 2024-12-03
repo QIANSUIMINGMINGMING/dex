@@ -52,9 +52,9 @@ class BatchForest : public tree_api<T, P> {
   bool insert(T key, P value) {
     XMD::KVTS kvts = XMD::KVTS{key, value, XMD::myClock::get_ts()};
     request_cache_->insert(kvts);
-    if (rand() % comp_node_num == 0) {
-      tob->packKVTS(kvts, 0);
-    }
+    // if (rand() % comp_node_num == 0) {
+    //   tob->packKVTS(kvts, 0);
+    // }
     return true;
   }
 
@@ -77,9 +77,9 @@ class BatchForest : public tree_api<T, P> {
   bool update(T key, P value) {
     XMD::KVTS kvts = XMD::KVTS{key, value, XMD::myClock::get_ts()};
     request_cache_->insert(kvts);
-    if (rand() % comp_node_num == 0) {
-      tob->packKVTS(kvts, 0);
-    }
+    // if (rand() % comp_node_num == 0) {
+    //   tob->packKVTS(kvts, 0);
+    // }
     return true;
   }
 
@@ -117,9 +117,9 @@ class BatchForest : public tree_api<T, P> {
   bool remove(T key) {
     XMD::KVTS kvts = XMD::KVTS{key, kValueNull, XMD::myClock::get_ts()};
     request_cache_->insert(kvts);
-    if (rand() % comp_node_num == 0) {
-      tob->packKVTS(kvts, 0);
-    }
+    // if (rand() % comp_node_num == 0) {
+    //   tob->packKVTS(kvts, 0);
+    // }
     return true;
   }
 
