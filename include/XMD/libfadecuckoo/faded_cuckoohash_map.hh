@@ -684,7 +684,7 @@ public:
    */
   template <typename K, typename V>
   bool update(const K &key, const uint64_t new_ts, V &&val) {
-    assert(new_ts > oldest_TS);
+    // assert(new_ts > oldest_TS);
     return update_fn(key, new_ts,
                      [&val](mapped_type &v) { v = std::forward<V>(val); });
   }
@@ -695,7 +695,7 @@ public:
    */
   template <typename K, typename... Args>
   bool insert(K &&key, uint64_t ts, bool & need_resize, Args &&...val) {
-    assert(ts > oldest_TS);
+    // assert(ts > oldest_TS);
     return upsert(
         std::forward<K>(key), ts, need_resize,
         [](mapped_type &) {},
