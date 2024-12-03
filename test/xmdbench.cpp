@@ -1157,8 +1157,6 @@ int main(int argc, char *argv[]) {
       // thread_run(0);
       std::thread ths[MAX_APP_THREAD];
 
-      tree->start_batch_insert();
-
       // thread_run(0);
       for (int i = 0; i < kThreadCount; i++) {
         ths[i] = std::thread(thread_run, i);
