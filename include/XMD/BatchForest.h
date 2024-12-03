@@ -1,17 +1,21 @@
 #pragma once
 
+#include "../tree_api.h"
 #include "BatchBtree.h"
 #include "XMD_request_cache.h"
 #include "mc_agent.h"
-#include "../tree_api.h"
+#include "request_cache_v2.h"
 
 template <class T, class P>
 class BatchForest : public tree_api<T, P> {
  public:
   BatchForest(DSM *dsm, uint64_t cache_mb, uint64_t request_mb, double sample,
               double admmision)
-      : my_dsm(dsm), request_cache_(request_mb * 1024 * 1024 / XMD::kPageSize) {
+      // : my_dsm(dsm), request_cache_(request_mb * 1024 * 1024 /
+      // XMD::kPageSize) {
+      : my_dsm(dsm) {
     std::cout << "creating XMD" << std::endl;
+    comp_node_num = dsm->getComputeNum();
     for (int i = 0; i < dsm->getComputeNum(); i++) {
       btrees[i] = new XMD::BatchBTree(dsm, i, cache_mb, sample, admmision);
     }
@@ -21,6 +25,21 @@ class BatchForest : public tree_api<T, P> {
         btrees[i]->first_set_new_root_ptr(first_root);
       }
     }
+
+    request_cache_ = new XMD::RequestCache_v3::RequestCache(
+        dsm, XMD::defaultCacheSize, dsm->getMyNodeID(), dsm->getComputeNum());
+    start_batch_insert();
+
+    mcm = new XMD::multicast::multicastCM(dsm, 1);
+    mcm->print_self();
+    // mcm2 = std::make_unique<rdmacm::multicast::multicastCM>(dsm);
+
+    dsm->barrier("init-mc");
+
+    tob = new XMD::multicast::TransferObjBuffer(mcm, 0);
+    multicast_recv_thread =
+        std::thread(XMD::multicast::TransferObjBuffer::fetch_thread_run, tob);
+
     dsm->barrier("set-roots1", dsm->getComputeNum());
 
     for (int i = 0; i < dsm->getComputeNum(); i++) {
@@ -28,49 +47,87 @@ class BatchForest : public tree_api<T, P> {
     }
   }
 
-  bool insert(T key, P value) { return true; }
+  ~BatchForest() { stop_batch_insert(); }
 
-  bool lookup(T key, P &value) {
-    int shard_id = key % my_dsm->getComputeNum();
-    // std::cout << "lookup" << key << std::endl;
-    XMD::BatchBTree *shard_tree = btrees[shard_id];
-    return shard_tree->search(key, value);
-  }
-
-  bool update(T key, P value) {
-    XMD::KVTS kvts[my_dsm->getComputeNum()];
-    for (int i = 0; i < my_dsm->getComputeNum(); i++) {
-      kvts[i] = XMD::KVTS{key + i, value, XMD::myClock::get_ts()};
+  bool insert(T key, P value) {
+    XMD::KVTS kvts = XMD::KVTS{key, value, XMD::myClock::get_ts()};
+    request_cache_->insert(kvts);
+    if (rand() % comp_node_num == 0) {
+      tob->packKVTS(kvts, 0);
     }
-
-    std::lock_guard<std::mutex> lock(request_cache_mutex_);
-
-    for (int i = 0; i < my_dsm->getComputeNum(); i++) {
-      request_cache_.insert(kvts[i]);
-    }
-
     return true;
   }
 
-  static void batch_insert_thread_run(XMD::BatchBTree *bbt, BatchForest *bf) {
-    bf->my_dsm->registerThread();
-
-    while (true) {
-      XMD::SkipList *cur_oldest = bf->request_cache_.get_oldest();
-      bbt->batch_insert(cur_oldest);
-      bf->request_cache_.update_oldest();
+  bool lookup(T key, P &value) {
+    bool ret = request_cache_->lookup(key, value);
+    if (ret) {
+      return ret;
     }
+    // path (II)
+    int shard_id = key % my_dsm->getComputeNum();
+    // std::cout << "lookup" << key << std::endl;
+    XMD::BatchBTree *shard_tree = btrees[shard_id];
+    ret = shard_tree->search(key, value);
+    if (ret && rand() % 10 == 0) {
+      request_cache_->insert_no_TS(key, value);
+    }
+    return ret;
+  }
+
+  bool update(T key, P value) {
+    XMD::KVTS kvts = XMD::KVTS{key, value, XMD::myClock::get_ts()};
+    request_cache_->insert(kvts);
+    if (rand() % comp_node_num == 0) {
+      tob->packKVTS(kvts, 0);
+    }
+    return true;
   }
 
   void start_batch_insert() {
-    batch_insert_thread = std::thread(batch_insert_thread_run, btrees[my_dsm->getMyNodeID()], this);
+    batch_update_th = std::thread(
+        XMD::RequestCache_v3::RequestCache::period_batch, request_cache_);
+    batch_check_th = std::thread(
+        XMD::RequestCache_v3::RequestCache::period_check, request_cache_);
   }
 
-  void stop_batch_insert() { batch_insert_thread.join(); }
+  void stop_batch_insert() {
+    batch_check_th.join();
+    batch_update_th.join();
+  }
 
-  bool remove(T key) { return true; }
+  // static void batch_insert_thread_run(XMD::BatchBTree *bbt, BatchForest *bf)
+  // {
+  //   bf->my_dsm->registerThread();
 
-  int range_scan(T key, uint32_t num, std::pair<T, P> *&result) { return 0; }
+  //   while (true) {
+  //     XMD::SkipList *cur_oldest = bf->request_cache_.get_oldest();
+  //     bbt->batch_insert(cur_oldest);
+  //     bf->request_cache_.update_oldest();
+  //   }
+  // }
+
+  // void start_batch_insert() {
+  //   batch_insert_thread = std::thread(batch_insert_thread_run,
+  //   btrees[my_dsm->getMyNodeID()], this);
+  // }
+
+  // void stop_batch_insert() { batch_insert_thread.join(); }
+
+  bool remove(T key) {
+    XMD::KVTS kvts = XMD::KVTS{key, kValueNull, XMD::myClock::get_ts()};
+    request_cache_->insert(kvts);
+    if (rand() % comp_node_num == 0) {
+      tob->packKVTS(kvts, 0);
+    }
+    return true;
+  }
+
+  int range_scan(T key, uint32_t num, std::pair<T, P> *&result) {
+    int shard_id = key % my_dsm->getComputeNum();
+    // std::cout << "lookup" << key << std::endl;
+    XMD::BatchBTree *shard_tree = btrees[shard_id];
+    return shard_tree->range_scan(key, num, result);
+  }
 
   void clear_statistic() {}
 
@@ -116,9 +173,17 @@ class BatchForest : public tree_api<T, P> {
   // }
 
   XMD::BatchBTree *btrees[MAX_MACHINE];
-  XMD::KVCache request_cache_;
-  std::mutex request_cache_mutex_;
-  std::thread batch_insert_thread;
+  // XMD::KVCache request_cache_;
+  XMD::RequestCache_v3::RequestCache *request_cache_;
+
+  // std::mutex request_cache_mutex_;
+  // std::thread batch_insert_thread;
+  std::thread batch_update_th;
+  std::thread batch_check_th;
+  XMD::multicast::multicastCM *mcm;
+  XMD::multicast::TransferObjBuffer *tob;
+  std::thread multicast_recv_thread;
+  int comp_node_num;
 
   DSM *my_dsm;
   // Do most initialization work here

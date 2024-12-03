@@ -4,11 +4,11 @@
 
 // #include <boost/unordered/concurrent_flat_map.hpp>
 // #include <boost/unordered/unordered_map.hpp>
-#include "../third_party/libcuckoo/cuckoohash_map.hh"
 #include <atomic>
 #include <iostream>
 #include <thread>
 
+#include "../third_party/libcuckoo/cuckoohash_map.hh"
 #include "XMD_index_cache.h"
 #include "XMD_request_cache.h"
 
@@ -234,6 +234,10 @@ class BatchBTree {
     return true;
   }
 
+  int range_scan(Key k, uint32_t num, std::pair<Key, Value> *&kv_buffer) {
+    return 0;
+  }
+
   void batch_insert(SkipList *skiplist) {
     assert(is_mine_);
     phaseI(skiplist);
@@ -439,8 +443,7 @@ class BatchBTree {
     }
   }
 
-  void leaf_to_remote(
-      std::vector<NodePage *> splitted_siblings) {
+  void leaf_to_remote(std::vector<NodePage *> splitted_siblings) {
     int total_idx = 0;
     int next_batch_num = splitted_siblings.size() > one_batch_nodes
                              ? one_batch_nodes
@@ -459,7 +462,8 @@ class BatchBTree {
         cur_leaf->set_consistent();
         memcpy(batch_buffer + i * kPageSize, cur_leaf, kPageSize);
       }
-      dsm_->write_sync(batch_buffer, next_batch_addr, cur_batch_num * kPageSize);
+      dsm_->write_sync(batch_buffer, next_batch_addr,
+                       cur_batch_num * kPageSize);
       total_idx += cur_batch_num;
     }
 
@@ -519,24 +523,24 @@ class BatchBTree {
   }
 
   void phaseIII() {
-    //TODO
-    // auto lt = innerNodeUpdatingTable.lock_table();
-    // std::vector<NodePage *> new_page_nodes;
-    // for (const auto &it : lt) {
-    //   NodePage *cur_inner = it.first;
-    //   hash_value *hv = it.second;
-    //   if (hv->kvtss.size() == 0) {
-    //     assert(false);
-    //   }
-    //   bool needRestart = false;
-    //   cur_inner->header.writeLockOrRestart(needRestart);
-    //   if (needRestart) {
-    //     assert(false);
-    //   }
-    //   cur_inner->updateNode(hv->kvtss, new_page_nodes);
-    //   cur_inner->header.writeUnlock();
-    // }
-    // lt.unlock();
+    // TODO
+    //  auto lt = innerNodeUpdatingTable.lock_table();
+    //  std::vector<NodePage *> new_page_nodes;
+    //  for (const auto &it : lt) {
+    //    NodePage *cur_inner = it.first;
+    //    hash_value *hv = it.second;
+    //    if (hv->kvtss.size() == 0) {
+    //      assert(false);
+    //    }
+    //    bool needRestart = false;
+    //    cur_inner->header.writeLockOrRestart(needRestart);
+    //    if (needRestart) {
+    //      assert(false);
+    //    }
+    //    cur_inner->updateNode(hv->kvtss, new_page_nodes);
+    //    cur_inner->header.writeUnlock();
+    //  }
+    //  lt.unlock();
 
     // leaf_to_remote(new_page_nodes);
     // innerNodeUpdatingTable.clear();

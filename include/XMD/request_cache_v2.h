@@ -70,7 +70,8 @@ class RequestCache {
       if (filter_buffer_.contain(k, max, min)) {
         if (max > snapshot_ts) {
           remote_find.fetch_add(1);
-          return compute_side_hash_.find(k, v);
+          compute_side_hash_.find(k, v);
+          return true;
         }
       }
     }
@@ -90,6 +91,12 @@ class RequestCache {
     cur_kvts.v = kvts.v;
     cur_kvts.ts = kvts.ts;
     return cur_push_pos;
+  }
+
+  void insert_no_TS(const Key &key, const Value &value) {
+    TS snapshot_ts = oldest_ts_.load();
+    bool need_resize = false;
+    rht_.insert(key, snapshot_ts, need_resize, value);
   }
 
   void insert(const KVTS &kvts) {

@@ -20,7 +20,7 @@ std::atomic<uint64_t> recv_psn;
 // std::unique_ptr<XMD::multicast::TransferObjBuffer> tob;
 XMD::multicast::TransferObjBuffer* tob;
 
-int send_thread_num = XMD::multicast::TransferObjBuffer::default_thread_num;
+int send_thread_num = 4; 
 
 struct Request {
   bool is_search;

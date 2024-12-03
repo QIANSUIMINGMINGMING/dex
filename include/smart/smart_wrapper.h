@@ -86,7 +86,7 @@ public:
 
     auto bulk_thread = [&](void *bulk_info) {
       auto my_parition = reinterpret_cast<smart_partition_info *>(bulk_info);
-      bindCore((my_parition->id % bulk_threads) * 2);
+      // bindCore((my_parition->id % bulk_threads) * 2);
       my_dsm->registerThread();
       auto num = my_parition->num;
       auto array = my_parition->array;

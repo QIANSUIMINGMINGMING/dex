@@ -191,7 +191,8 @@ void generate_index() {
 
     case 3:  // XMD
     {
-      tree = new BatchForest<Key, Value>(dsm, cache_mb, cache_mb, rpc_rate, admission_rate);
+      tree = new BatchForest<Key, Value>(dsm, cache_mb, cache_mb, rpc_rate,
+                                         admission_rate);
       break;
     }
   }
@@ -284,6 +285,160 @@ uint64_t generate_key_range() {
     }
   }
   return key;
+}
+
+void generate_workload_for_XMD() {
+  assert(tree_index == 3);
+  uint64_t *space_array = new uint64_t[kKeySpace];
+  for (uint64_t i = 0; i < kKeySpace; ++i) {
+    space_array[i] = i;
+  }
+  bulk_array = new uint64_t[bulk_load_num];
+  uint64_t thread_warmup_read_num =
+      ((kReadRatio + kRangeRatio) / 100.0) * (warmup_num / totalThreadCount);
+  uint64_t thread_op_read_num =
+      ((kReadRatio + kRangeRatio) / 100.0) * (op_num / totalThreadCount);
+
+  uint64_t thread_warmup_insert_num =
+      (kInsertRatio / 100.0) * (warmup_num / totalThreadCount) * CNodeCount;
+  uint64_t warmup_insert_key_num = thread_warmup_insert_num * kThreadCount;
+  uint64_t *read_array;
+
+  uint64_t thread_workload_insert_num =
+      (kInsertRatio / 100.0) * (op_num / totalThreadCount) * CNodeCount;
+  uint64_t workload_insert_key_num = thread_warmup_insert_num * kThreadCount;
+  uint64_t *insert_array = nullptr;
+
+  uint64_t thread_warmup_ud_num = ((kUpdateRatio + kDeleteRatio) / 100.0) *
+                                  (warmup_num / totalThreadCount) * CNodeCount;
+  uint64_t warmup_ud_key_num = thread_warmup_insert_num * kThreadCount;
+
+  uint64_t thread_workload_ud_num = ((kUpdateRatio + kDeleteRatio) / 100.0) *
+                                    (op_num / totalThreadCount) * CNodeCount;
+  uint64_t workload_ud_key_num = thread_warmup_insert_num * kThreadCount;
+  uint64_t *ud_array = nullptr;
+
+  partition_space = kKeySpace;
+  left_bound = 0;
+  right_bound = kKeySpace;
+  std::mt19937 gen(0xc70f6907UL);
+  std::shuffle(&space_array[0], &space_array[kKeySpace - 1], gen);
+  memcpy(&bulk_array[0], &space_array[0], sizeof(uint64_t) * bulk_load_num);
+
+  uint64_t regular_node_insert_num =
+      static_cast<uint64_t>(thread_warmup_insert_num * kMaxThread) +
+      static_cast<uint64_t>(thread_workload_insert_num * kMaxThread);
+  insert_array =
+      space_array + bulk_load_num + regular_node_insert_num * node_id;
+  assert((bulk_load_num + regular_node_insert_num * node_id +
+          warmup_insert_key_num + workload_insert_key_num) <= kKeySpace);
+
+  std::cout << "First key of bulkloading = " << bulk_array[0] << std::endl;
+  std::cout << "Last key of bulkloading = " << bulk_array[bulk_load_num - 1]
+            << std::endl;
+
+  init_key_generator();
+
+  // srand((unsigned)time(NULL));
+  // UniformRandom rng(rand());
+  UniformRandom rng(rdtsc() ^ node_id);
+  uint32_t random_num;
+  auto insertmark = kReadRatio + kInsertRatio * CNodeCount;
+  auto updatemark = insertmark + kUpdateRatio * CNodeCount;
+  auto deletemark = updatemark + kDeleteRatio * CNodeCount;
+  auto rangemark = deletemark + kRangeRatio;
+  assert(rangemark == (100 + (CNodeCount - 1) *
+                                 (kInsertRatio + kDeleteRatio + kUpdateRatio)));
+
+  // auto updatemark = insertmark + kUpdateRatio;
+  std::cout << "node warmup insert num = " << warmup_insert_key_num
+            << std::endl;
+  warmup_array = new uint64_t[warmup_num];
+  std::cout << "kReadRatio =" << kReadRatio << std::endl;
+  std::cout << "insertmark =" << insertmark << std::endl;
+  std::cout << "updatemark =" << updatemark << std::endl;
+  std::cout << "deletemark =" << deletemark << std::endl;
+  std::cout << "rangemark =" << rangemark << std::endl;
+
+  uint64_t i = 0;
+  uint64_t insert_counter = 0;
+  per_node_warmup_num = (thread_warmup_insert_num + thread_warmup_read_num +
+                         thread_warmup_ud_num) *
+                        kThreadCount;
+  while (i < per_node_warmup_num) {
+    random_num = rng.next_uint32() % rangemark;
+    uint64_t key = generate_key_range();
+    if (key)
+      if (random_num < kReadRatio) {
+        key = key | (static_cast<uint64_t>(op_type::Lookup) << 56);
+      } else if (random_num < insertmark) {
+        key = key | (static_cast<uint64_t>(op_type::Insert) << 56);
+      } else if (random_num < updatemark) {
+        key = key | (static_cast<uint64_t>(op_type::Update) << 56);
+      } else if (random_num < deletemark) {
+        key = key | (static_cast<uint64_t>(op_type::Delete) << 56);
+      } else {
+        key = key | (static_cast<uint64_t>(op_type::Range) << 56);
+      }
+    warmup_array[i] = key;
+    ++i;
+  }
+
+  std::cout << "node warmup num: " << per_node_warmup_num << std::endl;
+
+  // std::mt19937 gen(0xc70f6907UL);
+  if (per_node_warmup_num > 0) {
+    std::shuffle(&warmup_array[0], &warmup_array[per_node_warmup_num - 1], gen);
+  }
+  std::cout << "Finish warmup workload generation" << std::endl;
+
+  workload_array = new uint64_t[op_num];
+  i = 0;
+  insert_array = insert_array + insert_counter;
+  insert_counter = 0;
+  std::unordered_map<uint64_t, uint64_t> key_count;
+
+  per_node_op_num = (thread_op_read_num + thread_workload_insert_num +
+                     thread_workload_ud_num) *
+                    kThreadCount;
+  while (i < per_node_op_num) {
+    random_num = rng.next_uint32() % rangemark;
+    uint64_t key = generate_key_range();
+    if (key)
+      if (random_num < kReadRatio) {
+        key = key | (static_cast<uint64_t>(op_type::Lookup) << 56);
+      } else if (random_num < insertmark) {
+        key = key | (static_cast<uint64_t>(op_type::Insert) << 56);
+      } else if (random_num < updatemark) {
+        key = key | (static_cast<uint64_t>(op_type::Update) << 56);
+      } else if (random_num < deletemark) {
+        key = key | (static_cast<uint64_t>(op_type::Delete) << 56);
+      } else {
+        key = key | (static_cast<uint64_t>(op_type::Range) << 56);
+      }
+    workload_array[i] = key;
+    ++i;
+  }
+  std::cout << "node op num: " << per_node_op_num << std::endl;
+  // std::shuffle(&workload_array[0], &workload_array[node_op_num - 1], gen);
+  per_thread_op_num = per_node_op_num / kThreadCount;
+  per_thread_warmup_num = per_node_warmup_num / kThreadCount;
+  std::cout << "thread op num: " << per_thread_op_num;
+  std::cout << "and thread warm num: " << per_thread_warmup_num << std::endl;
+
+  // std::vector<std::pair<uint64_t, uint64_t>> keyValuePairs;
+  // for (const auto &entry : key_count) {
+  //   keyValuePairs.push_back(entry);
+  // }
+  // std::sort(keyValuePairs.begin(), keyValuePairs.end(),
+  //           [](const auto &a, const auto &b) { return a.second > b.second;
+  //           });
+  // for (int i = 0; i < 20; ++i) {
+  //   std::cout << i << " key: " << keyValuePairs[i].first
+  //             << " counter: " << keyValuePairs[i].second << std::endl;
+  // }
+  delete[] space_array;
+  std::cout << "Finish all workload generation" << std::endl;
 }
 
 void generate_workload() {
@@ -957,9 +1112,12 @@ int main(int argc, char *argv[]) {
 
     dsm->barrier("bulkload", CNodeCount);
     dsm->resetThread();
-    generate_workload();
+    if (tree_index == 3) {
+      generate_workload_for_XMD();
+    } else {
+      generate_workload();
+    }
     bulk_load();
-
     if (auto_tune) {
       run_times = admission_rate_vec.size() * rpc_rate_vec.size();
     }
@@ -1149,7 +1307,7 @@ int main(int argc, char *argv[]) {
         sleep(2);
       }
 
-      for (int i = 0; i < kThreadCount ; i++) {
+      for (int i = 0; i < kThreadCount; i++) {
         ths[i].join();
       }
 

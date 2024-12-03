@@ -118,7 +118,7 @@ class multicastCM {
       nodes[i]->print_self();
     }
   }
-  
+
   int getGroupSize() { return mcGroups; }
 
  private:
@@ -175,38 +175,130 @@ constexpr int BUFFER_SIZE = kMcMaxPostList / 2;
 
 static inline std::atomic<uint64_t> global_psn{0};
 
+// class TransferObjBuffer_v2 {
+//  public:
+//   multicastCM *my_cm_;
+//   multicast_node *cm_node_;
+//   int cur_pos{0};
+
+//   std::atomic<uint64_t> cur_element_num_in_concurrency{0};
+//   TransferObj *buffer_;
+//   TransferObj *recv_buffer_;
+//   TransferObj recv_buffer_for_test[1000];
+//   // std::thread fetch_thread;
+
+//   std::atomic<uint64_t> ready_to_send{0};
+//   inline static thread_local bool pause_flag = false;
+
+//   int recv_messages_num{0};
+//   TransferObjBuffer_v2(multicastCM *cm, int thread_group_id) : my_cm_(cm) {
+//     cm_node_ = my_cm_->getNode(thread_group_id);
+//     cur_pos = my_cm_->get_pos(thread_group_id, buffer_);
+//     buffer_->node_id = my_cm_->get_cnode_id();
+//     buffer_->psn = global_psn.fetch_add(1);
+//     recv_buffer_ = new TransferObj();
+//   }
+
+//   // test
+//   void print_recv() {
+//     int print_num = std::min(recv_messages_num, 20);
+//     for (int i = 0; i < print_num; i++) {
+//       printTransferObj(recv_buffer_[i]);
+//     }
+//   }
+
+//   ~TransferObjBuffer_v2() { delete recv_buffer_; }
+
+//   static void fetch_thread_run(TransferObjBuffer *tob) {
+//     int multicast_node_id = tob->cm_node_->id;
+//     while (true) {
+//       // tob->my_cm_->fetch_message(multicast_node_id, tob->recv_buffer_);
+//       tob->my_cm_->fetch_message(
+//           multicast_node_id,
+//           &(tob->recv_buffer_for_test[tob->recv_messages_num]));
+//       tob->recv_messages_num++;
+//       printf("one receive\n");
+//     }
+//     // tob->my_cm_->fetch_message(m, tob->buffer_);
+//   }
+
+//   void packKVTS(const KVTS &kvts, int thread_id) {
+//     while (pause_flag && ready_to_send.load() != 0) {
+//       yield(1);
+//     }
+//     if (pause_flag) {
+//       pause_flag = false;
+//       thread_num_cur[thread_id] = 0;
+//     }
+//     uint64_t &my_thread_cur = thread_num_cur[thread_id];
+//     if (my_thread_cur < per_thread_occupy) {
+//       uint64_t my_pos = my_thread_cur + thread_id * per_thread_occupy;
+//       buffer_->elements[my_pos].k = kvts.k;
+//       buffer_->elements[my_pos].ts = kvts.ts;
+//       buffer_->elements[my_pos].v = kvts.v;
+//       my_thread_cur++;
+//       if (ready_to_send.load() != 0) {
+//         ready_to_send.fetch_add(1);
+//         pause_flag = true;
+//       }
+//     } else {
+//       // put into concurrency
+//       uint64_t my_pos = cur_element_num_in_concurrency.fetch_add(1);
+//       if (my_pos < concurrency_num) {
+//         buffer_->elements[my_pos].k = kvts.k;
+//         buffer_->elements[my_pos].ts = kvts.ts;
+//         buffer_->elements[my_pos].v = kvts.v;
+//         if (my_pos == concurrency_num - 1) {
+//           ready_to_send.fetch_add(1);
+//           while (ready_to_send.load() != default_thread_num) {
+//             yield(1);
+//           }
+//           // send
+//           my_cm_->send_message(cm_node_->id, cur_pos);
+//           cur_pos = my_cm_->get_pos(cm_node_->id, buffer_);
+//           buffer_->node_id = my_cm_->get_cnode_id();
+//           buffer_->psn = global_psn.fetch_add(1);
+//           cur_element_num_in_concurrency.store(0);
+//           ready_to_send.store(0);
+//         }
+//       } else {
+//         ready_to_send.fetch_add(1);
+//         pause_flag = true;
+//       }
+//     }
+//   }
+// };
+
 class TransferObjBuffer {
  public:
   multicastCM *my_cm_;
   multicast_node *cm_node_;
   int cur_pos{0};
 
-  static constexpr uint64_t default_thread_num = 4;
-  static constexpr uint64_t per_thread_occupy =
-      kMcCardinality / (default_thread_num + 1);
-  uint64_t thread_num_cur[default_thread_num]{0};
+  // uint64_t packing_thread_num;
+  // uint64_t per_thread_occupy;
+  // //     kMcCardinality / (packing_thread_num + 1);
+  // inline static thread_local uint64_t thread_num_cur{0};
+  // uint64_t concurrency_num;
 
-  static constexpr uint64_t concurrency_num =
-      kMcCardinality - default_thread_num * per_thread_occupy;
   std::atomic<uint64_t> cur_element_num_in_concurrency{0};
   TransferObj *buffer_;
-  TransferObj * recv_buffer_;
+  TransferObj *recv_buffer_;
   TransferObj recv_buffer_for_test[1000];
   // std::thread fetch_thread;
 
   std::atomic<uint64_t> ready_to_send{0};
   inline static thread_local bool pause_flag = false;
   int recv_messages_num{0};
-  TransferObjBuffer(multicastCM *cm, int thread_group_id)
-      : my_cm_(cm) {
+  TransferObjBuffer(multicastCM *cm, int thread_group_id) : my_cm_(cm) {
     cm_node_ = my_cm_->getNode(thread_group_id);
     cur_pos = my_cm_->get_pos(thread_group_id, buffer_);
     buffer_->node_id = my_cm_->get_cnode_id();
     buffer_->psn = global_psn.fetch_add(1);
-    recv_buffer_ = new TransferObj(); 
+    recv_buffer_ = new TransferObj();
   }
 
-  //test
+  // test
   void print_recv() {
     int print_num = std::min(recv_messages_num, 20);
     for (int i = 0; i < print_num; i++) {
@@ -214,65 +306,84 @@ class TransferObjBuffer {
     }
   }
 
-  ~TransferObjBuffer() {
-    delete recv_buffer_;
-  }
+  ~TransferObjBuffer() { delete recv_buffer_; }
 
   static void fetch_thread_run(TransferObjBuffer *tob) {
     int multicast_node_id = tob->cm_node_->id;
     while (true) {
-      // tob->my_cm_->fetch_message(multicast_node_id, tob->recv_buffer_);
-      tob->my_cm_->fetch_message(multicast_node_id, &(tob->recv_buffer_for_test[tob->recv_messages_num]));
-      tob->recv_messages_num++;
-      printf("one receive\n");
+      tob->my_cm_->fetch_message(multicast_node_id, tob->recv_buffer_);
+      // tob->my_cm_->fetch_message(
+      //     multicast_node_id,
+      //     &(tob->recv_buffer_for_test[tob->recv_messages_num]));
+      // tob->recv_messages_num++;
+      // printf("one receive\n");
     }
     // tob->my_cm_->fetch_message(m, tob->buffer_);
   }
 
   void packKVTS(const KVTS &kvts, int thread_id) {
-    while (pause_flag && ready_to_send.load() != 0) {
-      yield(1);
-    }
-    if (pause_flag) {
-      pause_flag = false;
-      thread_num_cur[thread_id] = 0;
-    }
-    uint64_t &my_thread_cur = thread_num_cur[thread_id];
-    if (my_thread_cur < per_thread_occupy) {
-      uint64_t my_pos = my_thread_cur + thread_id * per_thread_occupy;
+  restart:
+    // while (pause_flag && ready_to_send.load() != 0) {
+    //   yield(1);
+    // }
+    // if (pause_flag) {
+    //   pause_flag = false;
+    //   thread_num_cur[thread_id] = 0;
+    // }
+    // uint64_t &my_thread_cur = thread_num_cur[thread_id];
+    // if (my_thread_cur < per_thread_occupy) {
+    //   uint64_t my_pos = my_thread_cur + thread_id * per_thread_occupy;
+    //   buffer_->elements[my_pos].k = kvts.k;
+    //   buffer_->elements[my_pos].ts = kvts.ts;
+    //   buffer_->elements[my_pos].v = kvts.v;
+    //   my_thread_cur++;
+    //   if (ready_to_send.load() != 0) {
+    //     ready_to_send.fetch_add(1);
+    //     pause_flag = true;
+    //   }
+    // } else {
+    // put into concurrency
+    uint64_t my_pos = cur_element_num_in_concurrency.fetch_add(1);
+    if (my_pos < kMcCardinality) {
       buffer_->elements[my_pos].k = kvts.k;
       buffer_->elements[my_pos].ts = kvts.ts;
       buffer_->elements[my_pos].v = kvts.v;
-      my_thread_cur++;
-      if (ready_to_send.load() != 0) {
-        ready_to_send.fetch_add(1);
-        pause_flag = true;
+      if (my_pos == kMcCardinality - 1) {
+        my_cm_->send_message(cm_node_->id, cur_pos);
+        cur_pos = my_cm_->get_pos(cm_node_->id, buffer_);
+        buffer_->node_id = my_cm_->get_cnode_id();
+        buffer_->psn = global_psn.fetch_add(1);
+        cur_element_num_in_concurrency.store(0);
       }
     } else {
-      // put into concurrency
-      uint64_t my_pos = cur_element_num_in_concurrency.fetch_add(1);
-      if (my_pos < concurrency_num) {
-        buffer_->elements[my_pos].k = kvts.k;
-        buffer_->elements[my_pos].ts = kvts.ts;
-        buffer_->elements[my_pos].v = kvts.v;
-        if (my_pos == concurrency_num - 1) {
-          ready_to_send.fetch_add(1);
-          while (ready_to_send.load() != default_thread_num) {
-            yield(1);
-          }
-          // send
-          my_cm_->send_message(cm_node_->id, cur_pos);
-          cur_pos = my_cm_->get_pos(cm_node_->id, buffer_);
-          buffer_->node_id = my_cm_->get_cnode_id();
-          buffer_->psn = global_psn.fetch_add(1);
-          cur_element_num_in_concurrency.store(0);
-          ready_to_send.store(0);
-        }
-      } else {
-        ready_to_send.fetch_add(1);
-        pause_flag = true;
+      int yield_time = 0;
+      while (cur_element_num_in_concurrency.load() >= kMcCardinality) {
+        yield_time++;
+        yield(yield_time);
       }
+      goto restart;
     }
+    // if (my_pos < ) {
+    //   buffer_->elements[my_pos].k = kvts.k;
+    //   buffer_->elements[my_pos].ts = kvts.ts;
+    //   buffer_->elements[my_pos].v = kvts.v;
+    //   if (my_pos == concurrency_num - 1) {
+    //     ready_to_send.fetch_add(1);
+    //     while (ready_to_send.load() != default_thread_num) {
+    //       yield(1);
+    //     }
+    //     // send
+    //     my_cm_->send_message(cm_node_->id, cur_pos);
+    //     cur_pos = my_cm_->get_pos(cm_node_->id, buffer_);
+    //     buffer_->node_id = my_cm_->get_cnode_id();
+    //     buffer_->psn = global_psn.fetch_add(1);
+    //     cur_element_num_in_concurrency.store(0);
+    //     ready_to_send.store(0);
+    //   }
+    // } else {
+    //   ready_to_send.fetch_add(1);
+    //   pause_flag = true;
+    // }
   }
 };
 
