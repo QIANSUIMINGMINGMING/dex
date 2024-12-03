@@ -56,6 +56,8 @@ class RequestCache {
     ht_size_ = bucket_num_ * slot_per_bucket_;
   };
 
+  // bool lookup
+
   bool lookup(const Key &k, Value &v) {
     TS snapshot_ts = oldest_ts_.load();
     bool found;

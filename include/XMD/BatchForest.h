@@ -59,18 +59,19 @@ class BatchForest : public tree_api<T, P> {
   }
 
   bool lookup(T key, P &value) {
-    bool ret = request_cache_->lookup(key, value);
-    if (ret) {
-      return ret;
-    }
+    bool ret;
+    // bool ret = request_cache_->lookup(key, value);
+    // if (ret) {
+    //   return ret;
+    // }
     // path (II)
     int shard_id = key % my_dsm->getComputeNum();
     // std::cout << "lookup" << key << std::endl;
     XMD::BatchBTree *shard_tree = btrees[shard_id];
     ret = shard_tree->search(key, value);
-    if (ret&& rand() % 2 ==0) {
-      request_cache_->insert_no_TS(key, value);
-    }
+    // if (ret&& rand() % 2 ==0) {
+    //   request_cache_->insert_no_TS(key, value);
+    // }
     return ret;
   }
 
