@@ -69,9 +69,9 @@ mem_threads=(1 4)
 cache=(0 64 128 256 384 512 1024)
 distribution=(0 1 2 3)
 zipf=(0.99)
-bulk=200
+bulk=180
 warmup=10
-runnum=200
+runnum=180
 nodenum=5
 
 # other
