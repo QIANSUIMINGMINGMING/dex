@@ -94,7 +94,7 @@ class RequestCache {
   }
 
   void insert_no_TS(const Key &key, const Value &value) {
-    TS snapshot_ts = oldest_ts_.load();
+    TS snapshot_ts = myClock::get_ts();
     bool need_resize = false;
     rht_.insert(key, snapshot_ts, need_resize, value);
   }
