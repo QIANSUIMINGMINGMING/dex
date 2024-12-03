@@ -491,12 +491,12 @@ public:
   template <typename K, typename F>
   bool update_fn(const K &key, uint64_t new_ts, F fn) {
     const hash_value hv = hashed_key(key);
-    const auto b = snapshot_and_lock_two<normal_mode>(hv);
-    // const size_type hp = hashpower();
-    // const size_type i1 = index_hash(hp, hv.hash);
-    // const size_type i2 = alt_index(hp, hv.partial, i1);
-    // const table_position pos = cuckoo_find(key, hv.partial, i1, i2);
-    const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
+    // const auto b = snapshot_and_lock_two<normal_mode>(hv);
+    const size_type hp = hashpower();
+    const size_type i1 = index_hash(hp, hv.hash);
+    const size_type i2 = alt_index(hp, hv.partial, i1);
+    const table_position pos = cuckoo_find(key, hv.partial, i1, i2);
+    // const table_position pos = cuckoo_find(key, hv.partial, b.i1, b.i2);
     if (pos.status == ok) {
       if (buckets_[pos.index].newerTS(pos.slot, new_ts)) {
         buckets_[pos.index].setTS(pos.slot, new_ts);
