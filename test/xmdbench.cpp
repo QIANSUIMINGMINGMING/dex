@@ -720,6 +720,7 @@ uint64_t total_up{0};
 uint64_t total_up_leaf{0};
 uint64_t total_up_rdma_read{0};
 uint64_t total_up_rdma_write{0};
+uint64_t total_execute_op{0};
 
 void thread_run(int id) {
   // Interleave the thread binding
@@ -935,11 +936,13 @@ void thread_run(int id) {
   bool not_found = false;
 
   total_up_rdma_write = total_up_rdma_read/(XMD::kLeafCardinality* 0.7) + total_up_rdma_read;
+  total_execute_op = execute_op.load();
+  
   std::cout << "read leaf num: " << total_up_leaf << std::endl;
   std::cout << "up op num: " << total_up << std::endl;
   std::cout << "up rdma read: " << total_up_rdma_read << std::endl;
   std::cout << "up rdma write: " << total_up_rdma_read << std::endl;
-  std::cout << "total op: " << execute_op.load()<< std::endl;
+  std::cout << "total op: " << total_execute_op<< std::endl;
 #ifdef CHECK_CORRECTNESS
       if (check_correctness && id == 0) {
     while (worker.load() != 0);
@@ -1460,6 +1463,12 @@ int main(int argc, char *argv[]) {
                 << static_cast<double>(rdma_read_size + rdma_write_size) /
                        execute_op.load()
                 << std::endl;
+
+      std::cout << "read leaf num: " << total_up_leaf << std::endl;
+      std::cout << "up op num: " << total_up << std::endl;
+      std::cout << "up rdma read: " << total_up_rdma_read << std::endl;
+      std::cout << "up rdma write: " << total_up_rdma_read << std::endl;
+      std::cout << "total op: " << total_execute_op << std::endl;
 
       // uint64_t max_time = 0;
       // for (int i = 0; i < kThreadCount; ++i) {
