@@ -715,6 +715,12 @@ void dirthread_run(int dirID) {
   }
 }
 
+uint64_t cur_up_id{0};
+uint64_t total_up{0};
+uint64_t total_up_leaf{0};
+uint64_t total_up_rdma_read{0};
+uint64_t total_up_rdma_write{0};
+
 void thread_run(int id) {
   // Interleave the thread binding
   // bindCore(id);
@@ -746,6 +752,7 @@ void thread_run(int id) {
   std::pair<Key, Value> *result = new std::pair<Key, Value>[scan_num];
 
   int pre_counter = 0;
+  
   while (counter < per_thread_warmup_num) {
     // if (counter - pre_counter > 1000) {
     //   std::cout << "warm counter: " << counter << std::endl;
@@ -828,6 +835,8 @@ void thread_run(int id) {
   success_counter = 0;
   auto start = std::chrono::high_resolution_clock::now();
   Timer thread_timer;
+  auto XMD_tree = static_cast<BatchForest<Key, Value> *>(tree);
+  XMD_tree->clear_batch_info();
   while (counter < per_thread_op_num) {
     // if (counter - pre_counter > 1000) {
     //   std::cout << "work counter: " << counter << std::endl;
@@ -852,6 +861,13 @@ void thread_run(int id) {
 
       case op_type::Update: {
         Value v = key;
+        cur_up_id += 1;
+        if (cur_up_id == 8192) {
+          total_up_leaf += XMD_tree->clear_batch_info();
+          total_up += cur_up_id;
+          total_up_rdma_read += total_up_leaf/32;
+          cur_up_id = 0;
+        }
         auto flag = tree->update(key, v);
         if (flag) ++success_counter;
       } break;
@@ -898,6 +914,8 @@ void thread_run(int id) {
 
   worker.fetch_sub(1);
 
+
+
   // uint64_t throughput =
   //     counter / (static_cast<double>(duration) / std::pow(10, 6));
   // total_tp[id] = throughput;  // (ops/s)
@@ -915,8 +933,15 @@ void thread_run(int id) {
   // std::cout << "Real rpc ratio = " << tree->get_rpc_ratio() << std::endl;
   uint64_t first_not_found_key = 0;
   bool not_found = false;
+
+  total_up_rdma_write = total_up_rdma_read/(XMD::kLeafCardinality* 0.7) + total_up_rdma_read;
+  std::cout << "read leaf num: " << total_up_leaf << std::endl;
+  std::cout << "up op num: " << total_up << std::endl;
+  std::cout << "up rdma read: " << total_up_rdma_read << std::endl;
+  std::cout << "up rdma write: " << total_up_rdma_read << std::endl;
+  std::cout << "total op: " << execute_op.load()<< std::endl;
 #ifdef CHECK_CORRECTNESS
-  if (check_correctness && id == 0) {
+      if (check_correctness && id == 0) {
     while (worker.load() != 0);
     uint64_t success_counter = 0;
     uint64_t num_not_found = 0;
@@ -1156,7 +1181,7 @@ int main(int argc, char *argv[]) {
 
     dsm->barrier("bulkload", CNodeCount);
     dsm->resetThread();
-    if (tree_index == 3) {
+    if (tree_index > 10) {
       generate_workload_for_XMD();
     } else {
       generate_workload();

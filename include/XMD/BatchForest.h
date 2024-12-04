@@ -98,9 +98,11 @@ class BatchForest : public tree_api<T, P> {
     return true;
   }
 
-  void clear_batch_info() {
+  int clear_batch_info() {
     batch_calculator.clear();
+    int ret = batch_leaf_num.load();
     batch_leaf_num.store(0);
+    return ret;
   }
 
   void start_batch_insert() {
