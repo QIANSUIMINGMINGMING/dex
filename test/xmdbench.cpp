@@ -864,9 +864,10 @@ void thread_run(int id) {
         Value v = key;
         cur_up_id += 1;
         if (cur_up_id == 8192) {
-          total_up_leaf += XMD_tree->clear_batch_info();
+          int round_leaf = XMD_tree->clear_batch_info();
+          total_up_leaf += round_leaf;
           total_up += cur_up_id;
-          total_up_rdma_read += total_up_leaf/32;
+          total_up_rdma_read += round_leaf/32;
           cur_up_id = 0;
         }
         auto flag = tree->update(key, v);
@@ -937,12 +938,11 @@ void thread_run(int id) {
 
   total_up_rdma_write = total_up_rdma_read/(XMD::kLeafCardinality* 0.7) + total_up_rdma_read;
   total_execute_op = execute_op.load();
-  
-  std::cout << "read leaf num: " << total_up_leaf << std::endl;
-  std::cout << "up op num: " << total_up << std::endl;
-  std::cout << "up rdma read: " << total_up_rdma_read << std::endl;
-  std::cout << "up rdma write: " << total_up_rdma_read << std::endl;
-  std::cout << "total op: " << total_execute_op<< std::endl;
+  // std::cout << "read leaf num: " << total_up_leaf << std::endl;
+  // std::cout << "up op num: " << total_up << std::endl;
+  // std::cout << "up rdma read: " << total_up_rdma_read << std::endl;
+  // std::cout << "up rdma write: " << total_up_rdma_read << std::endl;
+  // std::cout << "total op: " << total_execute_op<< std::endl;
 #ifdef CHECK_CORRECTNESS
       if (check_correctness && id == 0) {
     while (worker.load() != 0);
