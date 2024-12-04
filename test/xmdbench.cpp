@@ -1124,9 +1124,9 @@ int main(int argc, char *argv[]) {
     kThreadCount = kMaxThread;
   }
 
-  if (tree_index == 3) {
-    kThreadCount -= 1;
-  }
+  // if (tree_index == 3) {
+  //   kThreadCount -= 1;
+  // }
 
   double collect_throughput = 0;
   uint64_t total_throughput = 0;
