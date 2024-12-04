@@ -98,6 +98,11 @@ class BatchForest : public tree_api<T, P> {
     return true;
   }
 
+  void clear_batch_info() {
+    batch_calculator.clear();
+    batch_leaf_num.store(0);
+  }
+
   void start_batch_insert() {
     batch_update_th = std::thread(
         XMD::RequestCache_v3::RequestCache::period_batch, request_cache_);
