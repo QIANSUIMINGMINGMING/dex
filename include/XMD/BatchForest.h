@@ -6,6 +6,10 @@
 #include "mc_agent.h"
 #include "request_cache_v2.h"
 
+struct meta {
+  std::atomic<int> num_of_key{0};
+};
+
 template <class T, class P>
 class BatchForest : public tree_api<T, P> {
  public:
@@ -79,10 +83,18 @@ class BatchForest : public tree_api<T, P> {
 
   bool update(T key, P value) {
     XMD::KVTS kvts = XMD::KVTS{key, value, XMD::myClock::get_ts()};
-    request_cache_->insert(kvts);
-    // if (rand() % comp_node_num == 0) {
-    //   tob->packKVTS(kvts, 0);
-    // }
+    int shard_id = key % comp_node_num;
+    if (shard_id == my_dsm->getMyNodeID()) {
+      XMD::BatchBTree *shard_tree = btrees[shard_id];
+      GlobalAddress target_leaf;
+      struct meta *this_meta;
+      shard_tree->partial_search(k, target_leaf);
+      if (!batch_calculator.contains(target_leaf)) {
+        this_meta = new struct meta;
+        batch_calculator.insert(target_leaf, this_meta);
+        batch_leaf_num.fetch_add(1);
+      } 
+    }
     return true;
   }
 
@@ -187,6 +199,9 @@ class BatchForest : public tree_api<T, P> {
   XMD::multicast::multicastCM *mcm;
   XMD::multicast::TransferObjBuffer *tob;
   std::thread multicast_recv_thread;
+
+  libcuckoo::cuckoohash_map<GlobalAddress, struct meta*> batch_calculator;
+  std::atomic<int> batch_leaf_num{0};
   int comp_node_num;
 
   DSM *my_dsm;

@@ -286,7 +286,7 @@ class BatchBTree {
 
   CacheManager cache_;
 
-  bool partial_search(Key k, NodePage *&result) {
+  bool partial_search(Key k, GlobalAddress &result) {
     int restartCount = 0;
   restart:
     if (restartCount++) yield(restartCount);
@@ -308,7 +308,7 @@ class BatchBTree {
       goto restart;
     }
 
-    while (!cur_node->is_leaf) {
+    while (!cur_node->header.level > 1) {
       auto inner = cur_node;
       parent->readUnlockOrRestart(versionParent, needRestart);
       if (needRestart) {
@@ -388,21 +388,27 @@ class BatchBTree {
       // printNodePage(*cur_node);
     }
 
-    // Access the leaf node
-    NodePage *leaf = cur_node;
-    if (!leaf->header.rangeValid(k)) {
-      assert(false);
-      new_refresh_from_root(k);
-      goto restart;
-    }
-
-    result = leaf;
-
     if (parent) {
       parent->readUnlockOrRestart(versionParent, needRestart);
       if (needRestart) {
         goto restart;
       }
+    }
+
+    // Access the leaf node
+    NodePage *parent_of_leaf = cur_node;
+    if (!parent_of_leaf->header.rangeValid(k)) {
+      assert(false);
+      new_refresh_from_root(k);
+      goto restart;
+    }
+    auto idx = parent_of_leaf->lowerBound(k);
+    assert(idx != -1);
+
+    if (idx == LeftMostIdx) {
+      result = parent_of_leaf->left_ptr;
+    } else {
+      result.val = parent_of_leaf->values[idx];
     }
 
     cur_node->readUnlockOrRestart(versionNode, needRestart);
@@ -424,7 +430,7 @@ class BatchBTree {
       if (cur_kvts.k % cnode_num_ == tree_id_) {
         if (cur_leaf == nullptr || (cur_leaf->header.min_limit_ > cur_k &&
                                     cur_leaf->header.max_limit_ <= cur_k)) {
-          partial_search(cur_k, cur_leaf);
+          // partial_search(cur_k, cur_leaf);
           assert(cur_leaf->is_leaf);
           if (!nodeUpdatingTable.contains(cur_leaf)) {
             nodeUpdatingTable.insert(cur_leaf, next_hash);
