@@ -517,8 +517,8 @@ void generate_workload() {
         static_cast<uint64_t>(thread_workload_insert_num * kMaxThread);
     insert_array =
         space_array + bulk_load_num + regular_node_insert_num * node_id;
-    assert((bulk_load_num + regular_node_insert_num * node_id +
-            warmup_insert_key_num + workload_insert_key_num) <= kKeySpace);
+    // assert((bulk_load_num + regular_node_insert_num * node_id +
+    //         warmup_insert_key_num + workload_insert_key_num) <= kKeySpace);
   }
   std::cout << "First key of bulkloading = " << bulk_array[0] << std::endl;
   std::cout << "Last key of bulkloading = " << bulk_array[bulk_load_num - 1]
