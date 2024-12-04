@@ -867,7 +867,7 @@ void thread_run(int id) {
           int round_leaf = XMD_tree->clear_batch_info();
           total_up_leaf += round_leaf;
           total_up += cur_up_id;
-          total_up_rdma_read += round_leaf/32;
+          total_up_rdma_read += round_leaf/32 + 1;
           cur_up_id = 0;
         }
         auto flag = tree->update(key, v);
