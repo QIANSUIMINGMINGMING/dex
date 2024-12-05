@@ -43,8 +43,8 @@ class RequestCache {
   static thread_local u64 inline cur_buffer_remain = 0;
 
   RequestCache(DSM *dsm, u64 chrono_size, u64 node_id, u64 node_num)
-      : rht_(defaultCacheSize),
-        chrono_buffer_(chrono_size),
+      : rht_(chrono_size),
+        chrono_buffer_(defaultCacheSize * 2),
         filter_buffer_(),
         dsm_(dsm),
         compute_side_hash_(dsm) {
