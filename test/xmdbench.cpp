@@ -863,7 +863,7 @@ void thread_run(int id) {
       case op_type::Update: {
         Value v = key;
         cur_up_id += 1;
-        if (cur_up_id == 8192) {
+        if (cur_up_id >= 65536 * 4) {
           int round_leaf = XMD_tree->clear_batch_info();
           total_up_leaf += round_leaf;
           total_up += cur_up_id;

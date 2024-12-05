@@ -18,7 +18,8 @@ class BatchForest : public tree_api<T, P> {
       // : my_dsm(dsm), request_cache_(request_mb * 1024 * 1024 /
       // XMD::kPageSize) {
       : my_dsm(dsm) {
-    // batch_calculator = new libcuckoo::cuckoohash_map<GlobalAddress, struct meta*>();
+    // batch_calculator = new libcuckoo::cuckoohash_map<GlobalAddress, struct
+    // meta*>();
     std::cout << "creating XMD" << std::endl;
     comp_node_num = dsm->getComputeNum();
     for (int i = 0; i < dsm->getComputeNum(); i++) {
@@ -91,17 +92,17 @@ class BatchForest : public tree_api<T, P> {
       struct meta *this_meta;
       uint64_t taget_leaf_u64;
       shard_tree->partial_search(key, target_leaf);
-      taget_leaf_u64 = target_leaf.val;
+      taget_leaf_u64 = target_leaf.offset;
       if (!batch_calculator.contains(taget_leaf_u64)) {
         this_meta = new struct meta;
         batch_calculator.insert(taget_leaf_u64, this_meta);
         batch_leaf_num.fetch_add(1);
-      } 
+      }
     }
     return true;
   }
 
-  int clear_batch_info() {
+  uint64_t clear_batch_info() {
     batch_calculator.clear();
     int ret = batch_leaf_num.load();
     batch_leaf_num.store(0);
@@ -118,7 +119,6 @@ class BatchForest : public tree_api<T, P> {
   void stop_batch_insert() {
     // batch_check_th.join();
     // batch_update_th.join();
-    
   }
 
   // static void batch_insert_thread_run(XMD::BatchBTree *bbt, BatchForest *bf)
@@ -210,7 +210,7 @@ class BatchForest : public tree_api<T, P> {
   XMD::multicast::TransferObjBuffer *tob;
   std::thread multicast_recv_thread;
 
-  libcuckoo::cuckoohash_map<uint64_t, struct meta*> batch_calculator;
+  libcuckoo::cuckoohash_map<uint64_t, struct meta *> batch_calculator;
   std::atomic<int> batch_leaf_num{0};
   int comp_node_num;
 

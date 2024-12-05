@@ -308,7 +308,7 @@ class BatchBTree {
       goto restart;
     }
 
-    while (!cur_node->header.level > 1) {
+    while (cur_node->header.level > 1) {
       auto inner = cur_node;
       parent->readUnlockOrRestart(versionParent, needRestart);
       if (needRestart) {
