@@ -352,7 +352,8 @@ void thread_run_rc(int id, int op_num, int warm_num) {
   execute_op_num.fetch_add(i);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+  size_t request_cache_size = atoi(argv[1]);
   int CNodeCount = 1;
   DSMConfig config;
   config.machineNR = 2;
@@ -368,7 +369,7 @@ int main() {
   DSBench::init_random();
   uint16_t node_id = dsm->getMyNodeID();
   if (node_id < CNodeCount) {
-    cache = new XMD::RequestCache_v3::RequestCache(dsm, defaultCacheSize,
+    cache = new XMD::RequestCache_v3::RequestCache(dsm, request_cache_size,
                                                    node_id, CNodeCount);
     DSBench::zipf_test_keys = new uint64_t[op_num + warm_num];
     DSBench::uniform_test_keys = new uint64_t[op_num + warm_num];
