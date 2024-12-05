@@ -172,6 +172,7 @@ std::atomic<int> workers{0};
 
 libcuckoo::cuckoohash_map<uint64_t, uint64_t> map(100000000);
 libfadecuckoo::cuckoohash_map<uint64_t, uint64_t> fadedmap(100000000);
+int workload_type;
 
 void thread_run(int id, int op_num, int warm_num) {
   bindCore(id);
@@ -280,7 +281,7 @@ void thread_run_rc(int id, int op_num, int warm_num) {
       DSBench::zipf_test_keys + warm_num + id * thread_op_num;
 
   uint64_t* thread_op_array;
-  if (true) {
+  if (!workload_type) {
     thread_op_array = thread_op_array_uniform;
   } else {
     thread_op_array = thread_op_array_zipf;
@@ -354,6 +355,11 @@ void thread_run_rc(int id, int op_num, int warm_num) {
 
 int main(int argc, char* argv[]) {
   size_t request_cache_size = atoi(argv[1]);
+  workload_type = atoi(argv[2]);
+
+  // constexpr int defaultCacheSize = (128 * define::MB) / sizeof(KVTS);
+  size_t actual_size_n = (request_cache_size * define::MB) / sizeof(XMD::KVTS);
+
   int CNodeCount = 1;
   DSMConfig config;
   config.machineNR = 2;
@@ -369,7 +375,7 @@ int main(int argc, char* argv[]) {
   DSBench::init_random();
   uint16_t node_id = dsm->getMyNodeID();
   if (node_id < CNodeCount) {
-    cache = new XMD::RequestCache_v3::RequestCache(dsm, request_cache_size,
+    cache = new XMD::RequestCache_v3::RequestCache(dsm, actual_size_n,
                                                    node_id, CNodeCount);
     DSBench::zipf_test_keys = new uint64_t[op_num + warm_num];
     DSBench::uniform_test_keys = new uint64_t[op_num + warm_num];
