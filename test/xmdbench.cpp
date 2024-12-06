@@ -836,7 +836,9 @@ void thread_run(int id) {
     uint64_t key = thread_workload_array[counter];
     op_type cur_op = static_cast<op_type>(key >> 56);
     key = key & op_mask;
-    thread_timer.begin();
+    if (counter % 20 == 0) {
+      thread_timer.begin();
+    }
     switch (cur_op) {
       case op_type::Lookup: {
         Value v = key;
@@ -869,12 +871,15 @@ void thread_run(int id) {
       default:
         std::cout << "OP Type NOT MATCH!" << std::endl;
     }
-    auto us_10 = thread_timer.end() / 100;
-    if (us_10 >= LATENCY_WINDOWS) {
-      us_10 = LATENCY_WINDOWS - 1;
+
+    if (counter > 0 && counter % 20 == 19) {
+      auto us_10 = thread_timer.end() / 100;
+      if (us_10 >= LATENCY_WINDOWS) {
+        us_10 = LATENCY_WINDOWS - 1;
+      }
+      latency[id][us_10]++;
+      tp[id][0]++;
     }
-    latency[id][us_10]++;
-    tp[id][0]++;
     ++counter;
     // if (counter % 1000000 == 0) {
     //   std::cout << "Thread ID = " << id << "--------------------------------"
