@@ -162,7 +162,7 @@ void generate_workload(int op_num, int warm_num, int thread_num, int read_ratio,
 }  // namespace DSBench
 
 constexpr int MAX_THREAD_NUM = MAX_APP_THREAD;
-int thread_num = MAX_THREAD_NUM;
+int thread_num = 0;
 uint64_t total_tp[MAX_THREAD_NUM]{0};
 
 std::atomic<int> warm_up_ok{0};
@@ -356,6 +356,7 @@ void thread_run_rc(int id, int op_num, int warm_num) {
 int main(int argc, char* argv[]) {
   size_t request_cache_size = atoi(argv[1]);
   workload_type = atoi(argv[2]);
+  thread_num = atoi(argv[3]);
 
   // constexpr int defaultCacheSize = (128 * define::MB) / sizeof(KVTS);
   size_t actual_size_n = (request_cache_size * define::MB) / sizeof(XMD::KVTS);
