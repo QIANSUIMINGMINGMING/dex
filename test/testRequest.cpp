@@ -382,8 +382,8 @@ int main(int argc, char* argv[]) {
     DSBench::uniform_test_keys = new uint64_t[op_num + warm_num];
     std::thread th[MAX_THREAD_NUM];
     DSBench::generate_workload(op_num, warm_num, thread_num, 50, 25, 25, 0, 0);
-    // std::thread batch_update_th = std::thread(XMD::RequestCache_v3::RequestCache::period_batch, cache);
-    // std::thread batch_check_th = std::thread(XMD::RequestCache_v3::RequestCache::period_check,cache);
+    std::thread batch_update_th = std::thread(XMD::RequestCache_v3::RequestCache::period_batch, cache);
+    std::thread batch_check_th = std::thread(XMD::RequestCache_v3::RequestCache::period_check,cache);
 
     for (size_t i = 0; i < thread_num; i++) {
       th[i] = std::thread(thread_run_rc, i, op_num, warm_num);
