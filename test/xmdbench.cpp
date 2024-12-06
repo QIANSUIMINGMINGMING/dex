@@ -588,7 +588,7 @@ void thread_run(int id) {
   //        sizeof(uint64_t) * thread_warmup_num);
   size_t counter = 0;
   size_t success_counter = 0;
-  uint32_t scan_num = 100;
+  uint32_t scan_num = 200;
   std::pair<Key, Value> *result = new std::pair<Key, Value>[scan_num];
 
   int pre_counter = 0;
