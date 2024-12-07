@@ -769,10 +769,10 @@ void thread_run(int id) {
       case op_type::Insert: {
         Value v = key + 1;
         // auto flag = tree->insert(key, v);
-        bool need_resize;
+        bool need_resize = false;
         acache->rht_.insert_or_assign(key, XMD::myClock::get_ts(), need_resize,
                                       v);
-        assert(need_resize);
+        assert(!need_resize);
         ++success_counter;
         // Value v = key + 1;
         // auto flag = tree->insert(key, v);
@@ -870,9 +870,9 @@ void thread_run(int id) {
         Value v = key + 1;
         // auto flag = tree->insert(key, v);
         // XMD::KVTS kvts{key, v, XMD::myClock::get_ts()}; 
-        bool need_resize;
+        bool need_resize= false;
         acache->rht_.insert_or_assign(key, XMD::myClock::get_ts(), need_resize, v);
-        assert(need_resize);
+        assert(!need_resize);
          ++success_counter;
       } break;
 
