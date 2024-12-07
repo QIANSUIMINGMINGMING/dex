@@ -855,11 +855,11 @@ void thread_run(int id) {
     //   std::cout << "work counter: " << counter << std::endl;
     //   pre_counter = counter;
     // }
-    if (counter % 2500 == 0 && id == 0) {
+    if (counter % 50000 == 0 && id == 0) {
       old_tss[tss_idx] = XMD::myClock::get_ts();
       tss_idx = RING_ADD(tss_idx, 1, 100);
 
-      if (counter / 30000 > 0) {
+      if (counter / 300000 > 0) {
         acache->rht_.oldest_TS.store(old_tss[store_tss_idx]);
         store_tss_idx = RING_ADD(store_tss_idx, 1, 100);
       }
