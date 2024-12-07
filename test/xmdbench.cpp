@@ -609,8 +609,8 @@ void thread_run(int id) {
 
       case op_type::Insert: {
         Value v = key + 1;
-        auto flag = tree->insert(key, v);
-        if (flag) ++success_counter;
+        // auto flag = tree->insert(key, v);
+        // if (flag) ++success_counter;
       } break;
 
       case op_type::Update: {
@@ -692,8 +692,8 @@ void thread_run(int id) {
 
       case op_type::Insert: {
         Value v = key + 1;
-        auto flag = tree->insert(key, v);
-        if (flag) ++success_counter;
+        // auto flag = tree->insert(key, v);
+        // if (flag) ++success_counter;
       } break;
 
       case op_type::Update: {
