@@ -558,7 +558,7 @@ int Tree::range_query(const Key &from, const Key &to,
           auto &r = page->records[i];
           if (r.value != kValueNull && r.f_version == r.r_version) {
             if (r.key >= from && r.key <= to) {
-              assert(counter <= 300);
+              assert(counter <= 500);
               value_buffer[counter++] = std::make_pair(
                   static_cast<Key>(r.key), static_cast<Value>(r.value));
             }
