@@ -845,6 +845,9 @@ void thread_run(int id) {
   counter = 0;
   pre_counter = 0;
   success_counter = 0;
+  uint64_t old_tss[100];
+  int tss_idx = 0;
+  int store_tss_idx = 0;
   auto start = std::chrono::high_resolution_clock::now();
   Timer thread_timer;
   while (counter < per_thread_op_num) {
@@ -852,6 +855,15 @@ void thread_run(int id) {
     //   std::cout << "work counter: " << counter << std::endl;
     //   pre_counter = counter;
     // }
+    if (counter % 2500 == 0 && id == 0) {
+      old_tss[tss_idx] = XMD::myClock::get_ts();
+      tss_idx = RING_ADD(tss_idx, 1, 100);
+
+      if (counter / 30000 > 0) {
+        acache->rht_.oldest_TS.store(old_tss[store_tss_idx]);
+        store_tss_idx = RING_ADD(store_tss_idx, 1, 100);
+      }
+    }
     uint64_t key = thread_workload_array[counter];
     op_type cur_op = static_cast<op_type>(key >> 56);
     key = key & op_mask;
