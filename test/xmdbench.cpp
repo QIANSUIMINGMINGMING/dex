@@ -748,6 +748,7 @@ void thread_run(int id) {
   size_t success_counter = 0;
   uint32_t scan_num = 200;
   std::pair<Key, Value> *result = new std::pair<Key, Value>[scan_num];
+  uint32_t actual_scan = scan_num/CNodeCount;
 
   int pre_counter = 0;
   while (counter < per_thread_warmup_num) {
@@ -783,7 +784,11 @@ void thread_run(int id) {
       } break;
 
       case op_type::Range: {
-        auto flag = tree->range_scan(key, scan_num, result);
+        bool flag;
+        for (int i = 0; i < CNodeCount; i++) {
+          flag = tree->range_scan(key + i * actual_scan, actual_scan, result);
+        }
+        // auto flag = tree->range_scan(key, scan_num, result);
         if (flag) ++success_counter;
       } break;
 
@@ -871,7 +876,11 @@ void thread_run(int id) {
       } break;
 
       case op_type::Range: {
-        auto flag = tree->range_scan(key, scan_num, result);
+        bool flag;
+        for (int i = 0; i < CNodeCount; i++) {
+          flag = tree->range_scan(key + i*actual_scan, actual_scan, result);
+        }
+        // auto flag = tree->range_scan(key, scan_num, result);
         if (flag) ++success_counter;
       } break;
 
