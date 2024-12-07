@@ -715,6 +715,10 @@ void dirthread_run(int dirID) {
   }
 }
 
+XMD::RequestCache_v3::RequestCache *acache;
+std::thread batch_update_th; 
+std::thread batch_check_th;
+
 void thread_run(int id) {
   // Interleave the thread binding
   // bindCore(id);
@@ -742,7 +746,7 @@ void thread_run(int id) {
   //        sizeof(uint64_t) * thread_warmup_num);
   size_t counter = 0;
   size_t success_counter = 0;
-  uint32_t scan_num = 100;
+  uint32_t scan_num = 200;
   std::pair<Key, Value> *result = new std::pair<Key, Value>[scan_num];
 
   int pre_counter = 0;
@@ -849,8 +853,10 @@ void thread_run(int id) {
 
       case op_type::Insert: {
         Value v = key + 1;
-        auto flag = tree->insert(key, v);
-        if (flag) ++success_counter;
+        // auto flag = tree->insert(key, v);
+        XMD::KVTS kvts{key, v, XMD::myClock::get_ts()}; 
+        acache->insert(kvts);
+         ++success_counter;
       } break;
 
       case op_type::Update: {
@@ -1157,6 +1163,13 @@ int main(int argc, char *argv[]) {
   }
 
   if (node_id < CNodeCount) {
+    acache = new XMD::RequestCache_v3::RequestCache(dsm, XMD::defaultCacheSize,
+                                                    node_id, CNodeCount);
+    batch_update_th =
+        std::thread(XMD::RequestCache_v3::RequestCache::period_batch, acache);
+    batch_check_th =
+        std::thread(XMD::RequestCache_v3::RequestCache::period_check, acache);
+
     dsm->registerThread();
     generate_index();
 
