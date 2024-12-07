@@ -9,7 +9,7 @@
 namespace XMD {
 
 constexpr int kMaxRequestThreads = 256;
-constexpr int defaultCacheSize = (128 * define::MB) / sizeof(KVTS);
+constexpr int defaultCacheSize = (2048 * define::MB) / sizeof(KVTS);
 constexpr int kAllocateChunk = 32;
 constexpr int remote_rpc_batch = 16;
 constexpr int one_round_insert_amount = 8192;

@@ -768,8 +768,15 @@ void thread_run(int id) {
 
       case op_type::Insert: {
         Value v = key + 1;
-        auto flag = tree->insert(key, v);
-        if (flag) ++success_counter;
+        // auto flag = tree->insert(key, v);
+        bool need_resize;
+        acache->rht_.insert_or_assign(key, XMD::myClock::get_ts(), need_resize,
+                                      v);
+        assert(need_resize);
+        ++success_counter;
+        // Value v = key + 1;
+        // auto flag = tree->insert(key, v);
+        // if (flag) ++success_counter;
       } break;
 
       case op_type::Update: {
@@ -784,11 +791,12 @@ void thread_run(int id) {
       } break;
 
       case op_type::Range: {
-        bool flag;
-        for (int i = 0; i < CNodeCount; i++) {
-          flag = tree->range_scan(key + i * actual_scan, actual_scan, result);
-        }
-        // auto flag = tree->range_scan(key, scan_num, result);
+        // bool flag;
+        // for (int i = 0; i < CNodeCount; i++) {
+        //   flag = tree->range_scan(key + i * actual_scan, actual_scan, result);
+        // }
+        auto flag = tree->range_scan(key, scan_num, result);
+
         if (flag) ++success_counter;
       } break;
 
@@ -798,6 +806,8 @@ void thread_run(int id) {
     ++counter;
   }
   //}
+
+  //写太少了导致insert差TS不更新
 
   warmup_cnt.fetch_add(1);
   if (id == 0) {
@@ -859,8 +869,10 @@ void thread_run(int id) {
       case op_type::Insert: {
         Value v = key + 1;
         // auto flag = tree->insert(key, v);
-        XMD::KVTS kvts{key, v, XMD::myClock::get_ts()}; 
-        acache->insert(kvts);
+        // XMD::KVTS kvts{key, v, XMD::myClock::get_ts()}; 
+        bool need_resize;
+        acache->rht_.insert_or_assign(key, XMD::myClock::get_ts(), need_resize, v);
+        assert(need_resize);
          ++success_counter;
       } break;
 
