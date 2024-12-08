@@ -14,6 +14,7 @@ class BatchForest : public tree_api<T, P> {
       // : my_dsm(dsm), request_cache_(request_mb * 1024 * 1024 /
       // XMD::kPageSize) {
       : my_dsm(dsm) {
+    input_zipf_ = input_zipf;
     std::cout << "creating XMD" << std::endl;
     comp_node_num = dsm->getComputeNum();
     for (int i = 0; i < dsm->getComputeNum(); i++) {
@@ -71,7 +72,7 @@ class BatchForest : public tree_api<T, P> {
     // std::cout << "lookup" << key << std::endl;
     XMD::BatchBTree *shard_tree = btrees[shard_id];
     ret = shard_tree->search(key, value);
-    if (ret && rand() % 100 < input_zipf) {
+    if (ret && rand() % 100 < input_zip_) {
       request_cache_->insert_no_TS(key, value);
     }
     return ret;
@@ -189,6 +190,7 @@ class BatchForest : public tree_api<T, P> {
   XMD::multicast::TransferObjBuffer *tob;
   std::thread multicast_recv_thread;
   int comp_node_num;
+  int input_zipf_;
 
   DSM *my_dsm;
   // Do most initialization work here
