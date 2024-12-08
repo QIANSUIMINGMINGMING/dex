@@ -72,9 +72,9 @@ class BatchForest : public tree_api<T, P> {
     // std::cout << "lookup" << key << std::endl;
     XMD::BatchBTree *shard_tree = btrees[shard_id];
     ret = shard_tree->search(key, value);
-    if (ret && rand() % 100 < input_zipf_) {
-      request_cache_->insert_no_TS(key, value);
-    }
+    // if (ret && rand() % 100 < input_zipf_) {
+    //   request_cache_->insert_no_TS(key, value);
+    // }
     return ret;
   }
 
