@@ -71,15 +71,16 @@ class BatchForest : public tree_api<T, P> {
     // std::cout << "lookup" << key << std::endl;
     XMD::BatchBTree *shard_tree = btrees[shard_id];
     ret = shard_tree->search(key, value);
-    if (ret&& rand() % 2 ==0) {
+    if (ret) {
       request_cache_->insert_no_TS(key, value);
     }
     return ret;
   }
 
   bool update(T key, P value) {
-    XMD::KVTS kvts = XMD::KVTS{key, value, XMD::myClock::get_ts()};
-    request_cache_->insert(kvts);
+    // XMD::KVTS kvts = XMD::KVTS{key, value, XMD::myClock::get_ts()};
+    // request_cache_->insert(kvts);
+    request_cache_->insert_no_TS(key, value);
     // if (rand() % comp_node_num == 0) {
     //   tob->packKVTS(kvts, 0);
     // }
