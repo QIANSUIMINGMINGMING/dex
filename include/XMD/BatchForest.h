@@ -151,7 +151,7 @@ class BatchForest : public tree_api<T, P> {
         my_tree->bulk_load_tree_->insert(key, value);
       }
       if ((rand() % 100) < 50) {
-        request_cache_.insert_no_TS(key, value);
+        request_cache_->insert_no_TS(key, value);
       }
       // std::cout << "i: "<<i<<"vv " << bulk_array[i] << std::endl;
 
