@@ -191,8 +191,15 @@ void generate_index() {
 
     case 3:  // XMD
     {
+      if (workload_type == WorkLoadType::uniform) {
+        tree = new BatchForest<Key, Value>(dsm, cache_mb, cache_mb, rpc_rate,
+                                           admission_rate, 0);
+      } else if (workload_type == WorkLoadType::zipf) {
+        tree = new BatchForest<Key, Value>(dsm, cache_mb, cache_mb, rpc_rate,
+                                           admission_rate, 99);
+      } else {
       tree = new BatchForest<Key, Value>(dsm, cache_mb, cache_mb, rpc_rate,
-                                         admission_rate);
+                                         admission_rate, 99);}
       break;
     }
   }

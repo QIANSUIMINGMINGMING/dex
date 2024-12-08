@@ -10,7 +10,7 @@ template <class T, class P>
 class BatchForest : public tree_api<T, P> {
  public:
   BatchForest(DSM *dsm, uint64_t cache_mb, uint64_t request_mb, double sample,
-              double admmision)
+              double admmision, int zipf)
       // : my_dsm(dsm), request_cache_(request_mb * 1024 * 1024 /
       // XMD::kPageSize) {
       : my_dsm(dsm) {
@@ -27,7 +27,7 @@ class BatchForest : public tree_api<T, P> {
     }
 
     request_cache_ = new XMD::RequestCache_v3::RequestCache(
-        dsm, XMD::defaultCacheSize, dsm->getMyNodeID(), dsm->getComputeNum());
+        dsm, XMD::defaultCacheSize * 8, dsm->getMyNodeID(), dsm->getComputeNum());
     start_batch_insert();
 
     mcm = new XMD::multicast::multicastCM(dsm, 1);
@@ -71,7 +71,7 @@ class BatchForest : public tree_api<T, P> {
     // std::cout << "lookup" << key << std::endl;
     XMD::BatchBTree *shard_tree = btrees[shard_id];
     ret = shard_tree->search(key, value);
-    if (ret) {
+    if (ret && rand() % 100 < zipf) {
       request_cache_->insert_no_TS(key, value);
     }
     return ret;
