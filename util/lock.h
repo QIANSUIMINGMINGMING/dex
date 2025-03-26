@@ -117,10 +117,10 @@ public:
   }
 
   bool upgrade_to_exclusive_lock(uint32_t old_version) {
-    uint64_t cur_value = __atomic_load_n(&version_lock, __ATOMIC_ACQUIRE);
+    uint32_t cur_value = __atomic_load_n(&version_lock, __ATOMIC_ACQUIRE);
     if (cur_value != old_version)
       return false;
-    uint64_t new_value = cur_value | lockSet;
+    uint32_t new_value = cur_value | lockSet32;
     return CAS(&version_lock, &cur_value, new_value);
   }
 };
